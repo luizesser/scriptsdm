@@ -1,0 +1,511 @@
+---
+title: "Avaliação das variáveis preditoras"
+author: "Reginaldo Ré"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+knit: (function(...) {source("../config/script_funcoes_auxiliares.R"); myKnit(...)})
+output:
+  html_document:
+    df_print: paged
+    number_sections: TRUE    # seções numeradas automaticamente
+    toc: true                # construir o sumário
+    toc_float: true          # colocar o sumário flutuante no canto superior esquerdo
+    toc_depth: 3             # o sumário conterá três níveis de profundidade: capitulo, seção e subseção
+    theme: cerulean          # tema de cores estilo de fonte, use o "united" para um tema monocromico
+    code_folding: hide       # inclui botão para mostrar/esconder código fonte
+editor_options: 
+  chunk_output_type: inline
+---
+<style>
+div.main-container {
+    width: 100%;
+    max-width: unset;
+}
+</style>
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+source("../config/script_funcoes_auxiliares.R") 
+```
+
+# Configurações Iniciais 
+## Arquivos e pastas de entrada e saída
+
+```{r arquivos_pastas_entrada, eval=T, include=T}
+# Nome do arquivo shapefile que contém a grid de estudo.
+nome_shape_grid_estudo <- here("geoprocessamento/output_data/grid/upper_prpy_grid_10k_6933.shp")
+
+# Nome do arquivo shapefile com a matriz de presenças/ausências.
+nome_shape_matriz_pa <- here("ocorrencias/output_data/upper_prpy_pres_aus_10k_6933.shp")
+
+# Nome do arquivo shapefile com o SRTM.
+nome_shape_srtm <- here("geoprocessamento/output_data/shape_srtm_escalonado/srtm_10k_6933.shp")
+
+# Nome do arquivo shapefile com as variáveis do presente reescalonadas. 
+nome_shape_presente <- here("geoprocessamento/output_data/shape_bio_presente_escalonadas/presente_bio_10k_6933.shp")
+```
+
+```{r arquivos_pastas_saida, eval=T, include=T}
+# Nome do arquivo shapefile em que as PCAs das variáveis ambientais serão gravadas.
+nome_shape_pca_bio <- here("avaliacao_variaveis_preditoras/output_data/shape_pca_bio.shp")
+
+# Nome do arquivo shapefile em que as PCAs das variáveis hidrológicas (incluindo SRTM) serão gravadas.
+nome_shape_pca_hidro <- here("avaliacao_variaveis_preditoras/output_data/shape_pca_hidro.shp")
+
+# Nome do arquivo shapefile em que as PCAs de todas as variáveis ambientais e hidrológicas (incluindo SRTM) serão gravadas.
+nome_shape_pca_todas <- here("avaliacao_variaveis_preditoras/output_data/shape_pca_todas.shp")
+
+# Nome do arquivo shapefile em que as variáveis selecionadas como preditoras serão gravadas. 
+# Essas variáveis serão usadas no treinamento dos modelos.
+nome_shape_preditoras <- here("avaliacao_variaveis_preditoras/output_data/shape_preditoras.shp")
+
+if (!dir_exists("output_data")){
+  dir_create("output_data")
+}
+```
+
+## Variaveis de Controle
+
+```{r variaveis_controle, eval=T, include=T}
+# Nomes das espécies que serão utilizadas no estudo. Os nomes devem ser idênticos àqueles contidos no arquivo de ocorrências.
+# Caso queira utilizara todas as espécies do arquivo: nomes_especies <- NULL.
+nomes_especies <- c("sp109","sp110","sp111","sp112","sp113","sp114","sp115","sp116","sp117","sp118","sp119","sp120","sp121","sp122","sp123","sp124","sp125","sp126","sp127","sp128","sp129","sp130","sp131","sp132","sp133","sp134","sp135","sp136","sp137","sp138","sp139","sp140","sp141","sp142","sp143","sp144","sp145","sp146","sp147","sp148","sp149","sp150","sp151","sp152" )
+
+# Nomes de eventuais variáveis preditoras que se deseja excluir dos cálculos das PCAS.
+# Idealmente, variáveis indesejadas que podem, por engano, serem usadas durante a avaliação e treinamento dos modelos, deveriam ser excluídas dos shapefiles e rasters antes do reescalonamento.  Caso isso não seja feito, este é o modo de desconsiderar tais variáveis no estudo.
+var_remover <- c("endorhe", "main_ri")
+
+# Nomes das variáveis que serão normalizadas (centralizadas e escalonadas).
+# Existem estudos que comprovam que normalizar as variaveis melhora os modelos de predição.
+# Também, o cáculo das PCAs é melhor com variáveis normalizadas, além de algoritmos de clusterização usados na geração dos pontos de pseudo/ausência.
+var_normalizacao <- c("srtm", "bio_01", "bio_02", "bio_03", "bio_04", 	"bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", 	"bio_16", "bio_17", "bio_18", "bio_19") #"hyriv_i", "next_do", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng", "srtm", "bio_01", "bio_02", "bio_03", "bio_04", 	"bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", 	"bio_16", "bio_17", "bio_18", "bio_19")
+
+# Nomes das variáveis ambientais que serão usadas nos calculos das PCAs.
+var_pca_bio <- c("bio_01", "bio_02", "bio_03", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", "bio_16", "bio_17", "bio_18", "bio_19") 
+
+# Nomes das variáveis hidrológicas que serão usadas nos calculos das PCAs.
+var_pca_hidro <- c("srtm") #hyriv_i", "next_do", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng", "srtm")
+
+# Número de eixos das PCAs a serem calculados para as variáveis ambientais.
+nr_comp_pca_bio <- 8
+
+# Número de eixos das PCAs a serem calculados para as variáveis hidrológicas (incluindo SRTM).
+nr_comp_pca_hidro <- 6
+
+# Número de eixos das PCAs a serem calculados para todas as variáveis, ambientais e hidrológicas (incluindo SRTM).
+nr_comp_pca_todas <- 13
+
+# Nomes das variáveis a serem usadas como preditoras a serem gravadas no shapefile que será usada para o treinamento dos modelos.
+# Podem ser variáveis ambientais, hidrológicas e/ou nomes dos eixos das PCAs.
+nome_var_preditoras <-c("dim_1_todas","dim_2_todas")#"srtm", "bio_03","bio_15", "bio_18", "bio_19"
+```
+
+# Preparação das variáveis preditoras
+
+## Carregamento e Junção das variáveis preditoras com a matriz de presença e ausência
+
+```{r juncao_preditoras_pa, eval=T, include=T}
+shape_grid_estudo <- nome_shape_grid_estudo %>%
+  readOGR(verbose = T)
+
+df_potenciais_preditoras <- shape_grid_estudo %>%
+  get_var_shp() %>%
+  add_var_shp(nome_shape_srtm) %>%
+  add_var_shp(nome_shape_presente) %>% 
+  remove_var(var_remover) %>%
+  remove_var(nomes_especies)
+
+names(df_potenciais_preditoras)
+```
+  
+```{r presencas_ausencias, eval=T, include=T}
+df_pres_aus <- get_var_shp(nome_shape_matriz_pa) 
+```
+
+## Padronização e normalização das variáveis preditoras
+
+```{r transformacao_variaveis, eval=T, include=T}
+# TODO: Pesquisar e averiguar a adequação de usar o bestNormalize (https://cran.r-project.org/web/packages/bestNormalize/vignettes/customization.html)
+df_potenciais_preditoras <- df_potenciais_preditoras %>% 
+  center_scale(var_normalizacao)
+
+df_potenciais_preditoras %>% 
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+# Preparação das variáveis para avaliação das PCAs
+
+```{r preparar_df_pca,  eval=T, include=T}
+df_var_pca_bio <- df_potenciais_preditoras %>% 
+  select(var_pca_bio %>% all_of())
+
+df_var_pca_bio %>%
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+
+df_var_pca_hidro <- df_potenciais_preditoras %>% 
+  select(var_pca_hidro %>% all_of())
+
+df_var_pca_hidro %>%
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+
+df_var_pca_todas <- df_var_pca_hidro %>% 
+  bind_cols(df_var_pca_bio)
+
+df_var_pca_hidro %>%
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+## Análise das PCAs das variáveis bioclimáticas
+
+### Gráfico de matriz de correlação bioclimáticas
+```{r grafico_corr_bio, eval=T, include=T}
+df_var_pca_bio %>% 
+  corr_plot()
+```
+  
+
+### PCA das variáveis bioclimáticas
+
+A tabela a seguir mostra os valores dos eixos e variaveis.
+
+```{r calc_pca_bio, eval=T, include=T}
+if (nome_shape_pca_bio %>% file_exists() == T) {
+  file_delete(nome_shape_pca_bio)
+}
+pca_bio <- df_var_pca_bio %>% 
+  calc_pca(nr_comp_pca_bio, "bio")
+
+pca_bio$var$loadings %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+
+shape_grid_estudo %>% 
+  SpatialPointsDataFrame(
+    shape_grid_estudo@data %>% select(id_celula) %>% bind_cols(pca_bio$ind$coord %>% as.data.frame()), 
+    match.ID = F
+  ) %>% 
+  writeOGR(dsn = nome_shape_pca_bio, layer=".", driver="ESRI Shapefile")
+```
+
+
+Sumarização das dimensões. Na tabela a seguir, é mostrada a correlação de cada variável com cada eixo, mostrando a significância da variável no dado eixo.
+
+```{r summ_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  dt_pca_summ()
+```
+
+
+#### Contribuição das variáveis
+
+```{r contrib_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  contrib_scree()
+  
+pca_bio %>% 
+  contrib_corr()
+```
+
+
+```{r contrib_dims_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  contrib_dims()
+```
+
+
+
+#### Qualidade da representação das variáveis
+
+Eixos da PCA considerando a qualidade da representação das variáveis.
+```{r cos2_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  pca_cos2()
+```
+
+
+Qualidade da representação das variáveis nos eixos.
+```{r dims_cos2_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  cos2_dims()
+```
+
+
+```{r cos2_corr_pca_bio, eval=T, warning=F, include=T}
+pca_bio %>% 
+  cos2_corr()
+```
+
+
+```{r pca_bio_biplot, eval=T, include=T}
+
+pca_bio %>% 
+  pca_bi_plot(df_pres_aus %>% rowMeans() %>% ceiling())
+```
+
+
+```{r select_pca_bio, eval=T, include=T}
+pca_bio %>% 
+  comp_pca_retain()
+```
+
+
+## Análise das PCAs das variáveis hidrológicas
+
+### Gráfico de matriz de correlação hidrológicas
+```{r  grafico_corr_hidro, eval=T, include=T, warning=F}
+df_var_pca_hidro %>% 
+  corr_plot()
+```
+
+
+### PCA das variáveis hidrologicas
+
+A tabela a seguir mostra os valores dos eixos e variaveis.
+
+```{r calc_pca_hidro, eval=T, include=T}
+if (nome_shape_pca_hidro %>% file_exists() == T){
+  nome_shape_pca_hidro %>%
+    file_delete()
+}
+
+pca_hidro <- df_var_pca_hidro %>% 
+  calc_pca(nr_comp_pca_hidro, "Hidro")
+
+pca_hidro$var$loadings %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+
+shape_grid_estudo %>% 
+  SpatialPointsDataFrame(
+      shape_grid_estudo@data %>% select(id_celula) %>% bind_cols(pca_hidro$ind$coord %>% as.data.frame()), 
+      match.ID = F
+    ) %>% 
+  writeOGR(dsn = nome_shape_pca_hidro, layer=".", driver="ESRI Shapefile")
+```
+
+
+
+Sumarização das dimensões. Na tabela a seguir, é mostrada a correlação de cada variável com cada eixo, mostrando a sginificância da variável no dado eixo.
+
+```{r summ_pca_hidro, eval=T, include=T}
+pca_hidro %>% 
+  dt_pca_summ()
+```
+
+
+
+#### Contribuição das variáveis
+
+Eixos da PCA considerando a contribuição das variáveis.
+
+```{r contrib_pca_hidro, eval=T, include=T}
+pca_hidro %>% 
+  contrib_scree()
+
+pca_hidro %>%  
+  contrib_corr()
+```
+
+Contribuição das variáveis.
+```{r contrib_dims_pca_hidro, eval=T, include=T}
+pca_hidro %>% 
+  contrib_dims()
+```
+
+
+#### Qualidade da representação das variáveis
+
+Eixos da PCA considerando a qualidade da representação das variáveis.
+
+```{r cos2_pca_hidro, eval=T, include=T}
+pca_hidro %>% 
+  pca_cos2()
+```
+
+
+Qualidade da representação das variáveis nos eixos.
+```{r dims_cos2_pca_hidro, eval=T, include=T}
+pca_hidro %>%
+  cos2_dims()
+```
+
+
+```{r cos2_corr_pca_hidro, eval=T, include=T, warning=F}
+pca_hidro %>%
+  cos2_corr()
+```
+
+
+```{r pca_hidro_biplot, eval=T, include=T}
+pca_hidro %>%
+  pca_bi_plot(df_pres_aus %>% rowMeans() %>% ceiling())
+```
+
+
+```{r select_pca_hidro, eval=T, include=T}
+pca_hidro %>% 
+  comp_pca_retain()
+```
+
+## Análise das PCAs de todas as variáveis
+
+### Gráfico de matriz de correlação 
+```{r  grafico_corr_todas, eval=T, include=T, warning=F}
+df_var_pca_todas %>% 
+  corr_plot()
+```
+
+
+### PCA de todas as variáveis
+
+A tabela a seguir mostra os valores dos eixos e variaveis.
+
+```{r calc_pca_todas, eval=T, include=T}
+if (nome_shape_pca_todas %>% file_exists() == T) {
+  nome_shape_pca_todas %>% file_delete()
+}
+
+pca_todas <- df_var_pca_todas %>% 
+  calc_pca(nr_comp_pca_todas, "Todas")
+
+pca_todas$var$loadings %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+
+shape_grid_estudo %>% 
+  SpatialPointsDataFrame(
+    shape_grid_estudo@data %>% select(id_celula) %>% bind_cols(pca_todas$ind$coord %>% as.data.frame()), 
+    match.ID = F
+  ) %>% 
+  writeOGR(
+      dsn = nome_shape_pca_todas, 
+      layer=".", 
+      driver="ESRI Shapefile"
+  )
+```
+
+
+
+Sumarização das dimensões. Na tabela a seguir, é mostrada a correlação de cada variável com cada eixo, mostrando a sginificância da variável no dado eixo.
+
+```{r summ_pca_todas, eval=T, include=T}
+pca_todas %>% 
+  dt_pca_summ()
+```
+
+
+
+#### Contribuição das variáveis
+
+Eixos da PCA considerando a contribuição das variáveis.
+
+```{r contrib_pca_todas, eval=T, include=T}
+pca_todas %>% 
+  contrib_scree()
+
+pca_todas %>%  
+  contrib_corr()
+```
+
+Contribuição das variáveis.
+```{r contrib_dims_pca_todas, eval=T, include=T}
+pca_todas %>% 
+  contrib_dims()
+```
+
+#### Qualidade da representação das variáveis
+
+Eixos da PCA considerando a qualidade da representação das variáveis.
+
+```{r cos2_pca_todas, eval=T, include=T}
+pca_todas %>% 
+  pca_cos2()
+```
+
+
+Qualidade da representação das variáveis nos eixos.
+```{r dims_cos2_pca_todas, eval=T, include=T}
+pca_todas %>%
+  cos2_dims()
+```
+
+
+```{r cos2_corr_pca_todas, eval=T, include=T, warning=F}
+pca_todas %>%
+  cos2_corr()
+```
+
+
+```{r pca_todas_biplot, eval=T, include=T}
+pca_todas %>%
+  pca_bi_plot(df_pres_aus %>% rowMeans() %>% ceiling())
+```
+
+
+```{r select_pca_todas, eval=T, include=T}
+pca_todas %>% 
+  comp_pca_retain()
+```
+
+
+# VIF das variáveis 
+```{r vif_bio, eval=T, include=T}
+#vif(df_var_pca_bio)
+vifcor(df_var_pca_bio, th = 0.5)
+#vifstep(df_var_pca_bio)
+```
+
+
+```{r vif_hidro, eval=T, include=T}
+#vif(df_var_pca_hidro)
+#vifcor(df_var_pca_hidro, th = 0.5)
+#vifstep(df_var_pca_hidro)
+```
+
+
+```{r vif_todas, eval=T, include=T}
+vifcor(df_var_pca_todas, th = 0.5)
+```
+
+# Geração do shapefile com as variáveis preditoras
+
+## Junção das PCAS às variáveis
+```{r}
+df_potenciais_preditoras <- df_potenciais_preditoras %>%
+  bind_cols(pca_bio$ind$coord %>% as.data.frame()) %>%
+  #bind_cols(pca_hidro$ind$coord %>% as.data.frame()) %>%
+  bind_cols(pca_todas$ind$coord %>% as.data.frame())
+
+df_potenciais_preditoras %>% 
+  head() %>% 
+  round(4) %>%
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+
+```{r geracao_shapefiles_var, eval=T, include=T}
+if (nome_shape_preditoras %>% file_exists() == F){
+  df_var_preditoras <- df_potenciais_preditoras %>% 
+    select(nome_var_preditoras %>% all_of())
+  
+  shapefile_var_preditoras <- shape_grid_estudo %>%
+    SpatialPolygonsDataFrame(
+        shape_grid_estudo@data %>% select(id_celula) %>% bind_cols(df_var_preditoras), 
+        match.ID = F
+      ) %>% 
+    writeOGR(
+        dsn = nome_shape_preditoras, 
+        layer=".", 
+        driver="ESRI Shapefile"
+    )
+}
+```
+
+
+ 
