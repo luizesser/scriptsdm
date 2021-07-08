@@ -1,0 +1,50 @@
+---
+title: "Estudo de Múltiplas Espécies"
+author: "Reginaldo Ré"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+knit: (function(...) {source("./config/script_funcoes_auxiliares.R"); myKnit(...)})
+output:
+  html_document:
+    df_print: paged
+    theme: cerulean         
+editor_options: 
+  chunk_output_type: inline
+---
+<style>
+div.main-container {
+    width: 100%;
+    max-width: unset;
+}
+</style>
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+source("./config/script_funcoes_auxiliares.R") 
+```
+
+```{r geoprocessamento, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r ocorrencias, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r avaliacao_variaveis_preditoras, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r treinamento_avaliacao, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r distribuicao_presente, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r preparacao_variaveis_futuro, echo=F, results='asis'}
+render_chunk_as_html()
+```
+
+```{r distribuicao_futuro, echo=F, results='asis'}
+render_chunk_as_html()
+```
