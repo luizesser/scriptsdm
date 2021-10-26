@@ -31,32 +31,29 @@ source("../config/script_funcoes_auxiliares.R")
 ## Arquivos e pastas
 
 ```{r arquivos_pastas_entrada, eval=T, include=T}
-# Arquivo shapefile (polígono ou linhas) com com a área que delimita o estudo.
-nome_shape_area_estudo <- here("geoprocessamento/input_data/shape_area_estudo/hydro_upper_prpy.shp")
 
-# Nome do raster com SRTM
-nome_raster_srtm <- here("geoprocessamento/input_data/raster_srtm/SRTM_AS_250[5880].tif")
+# Um título para a área de estudo
+nome_area_estudo <- "Novo Mundo"
+
+# Arquivo shapefile (polígono ou linhas) com com a área que delimita o estudo.
+nome_shape_area_estudo <- here("geoprocessamento/input_data/shape_area_estudo/Novo_Mundo_Limite.shp")  
 
 # Nome da pasta que contém os rasters das variáveis no presente que serão reescalonadas.
-pasta_rasters_presente <- here("geoprocessamento/input_data/rasters_bio_presente/")
+pasta_rasters_presente <- here("geoprocessamento/input_data/raster_variaveis_presente/")
 
 # Nome da pasta que contém os rasters das variáveis nos cenários futuros que serão reescalonadas.
-pasta_rasters_cenarios_futuros <- here("geoprocessamento/input_data/rasters_bio_futuro/")
+pasta_rasters_cenarios_futuros <- NULL
 ```
 
 ```{r arquivos_pastas_saida, eval=T, include=T}
 # Nome do shapefile em que a grid de estudo será gravado.
-nome_shape_grid_estudo <- here("geoprocessamento/output_data/grid/upper_prpy_grid_10k_6933.shp")
+nome_shape_grid_estudo <- here("geoprocessamento/output_data/grid/novo_mundo_grid_50k_6933.shp")
 
-# Nome do shapefile em que o SRTM reescalonado será gravado.
-nome_shape_srtm <- here("geoprocessamento/output_data/shape_srtm_escalonado/srtm_10k_6933.shp")
-
-# Nome do shapefile em que as variáveis do presente reescalonadas será gravado.
-nome_shape_presente <- here("geoprocessamento/output_data/shape_bio_presente_escalonadas/presente_bio_10k_6933.shp")
+# Nome do shapefile em que as variáveis do presente reescalonadas serão gravadas.
+nome_shape_presente <- here("geoprocessamento/output_data/shape_variaveis_presente_escalonadas/presente_bio_50k_6933.shp")
 
 # Nome do shapefile em que as variáveis dos cenários futuros reescalonadas serão gravados.
-pasta_shape_futuro <- here("geoprocessamento/output_data/shape_bio_futuro_escalonadas")
-
+pasta_shape_futuro <-NULL
 
 if (!dir_exists("output_data")){
   dir_create("output_data")
@@ -72,36 +69,29 @@ projecao_desejada <- "+init=epsg:6933"
 # Tamanho de área mínima (em metros quadrados) de polígonos a serem mantidos durante a geração da grid. 
 tamanho_area_limite <- 8000 * 8000
 
-
 # Altura e largura das células da grid.
 largura_celula = 10000
 altura_celula = 10000
 
 # Nomes das variáveis do shapefile da área de estudo que serão mantidas durante o reescalonamento.
 # Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis. 
-# Caso não queira manter nenhuma, use `c()` 
-nomes_variaveis_grid <-  c()#"hyriv_i", "next_do", "main_ri", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "endorhe", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng")
-
-# Nome da variável srtm do raster que será mantida durante o reescalonamento. 
-# Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis.
-# Caso não queira manter nenhuma, use `c()` 
-nome_var_srtm <- c("srtm")
+# Caso não queira manter nenhuma, use "list()". Caso queira todas, use NULL 
+nomes_variaveis_grid <-  NULL # c("hyriv_i", "next_do", "main_ri", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "endorhe", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng")
 
 
 # Nome das variáveis no presente do raster que serão mantidas durante o reescalonamento. 
-# Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis.
-# Caso não queira manter nenhuma, use `c()`
-nomes_variaveis_presente <- c("bio_01", "bio_02", "bio_03", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", "bio_16", "bio_17", "bio_18", "bio_19")
+# Estabelecer o nome correto  para as variáveis. O script é capaz de encontrar os rasters com o nome parcial.
+# Caso não queira manter nenhuma, use "list()". Caso queira todas, use NULL
+nomes_variaveis_presente <- c("bio_01", "bio_02", "bio_03", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", "bio_16", "bio_17", "bio_18", "bio_19", "elev", "prec", "srad", "tavg", "tmax", "tmin", "vapr")
 
 # Nome das variáveis nos cenários futuros dos rasters que serão mantidas durante o reescalonamento. 
 # Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis.
-# Caso não queira manter nenhuma, use `c()`
-nomes_variaveis_futuro <-  c("bio_01", "bio_02", "bio_03", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", "bio_16", "bio_17", "bio_18", "bio_19")
-
+# Caso não queira manter nenhuma, use "list()". Caso queira todas, use NULL
+nomes_variaveis_futuro <-  NULL #c("bio_01", "bio_02", "bio_03", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11", "bio_12", "bio_13", "bio_14", "bio_15", "bio_16", "bio_17", "bio_18", "bio_19")
 
 # Algumas variaveis bioclimaticas dos cenários futuros são multiplicadas por 10, devemos voltar ao valor normal.
 # Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis.
-# Caso não queira manter nenhuma, use `c()`
+# Caso não queira manter nenhuma, use "list()" ou NULL
 nomes_variaveis_futuro_x10 <- c("bio_01", "bio_02", "bio_04", "bio_05", "bio_06", "bio_07", "bio_08", "bio_09", "bio_10", "bio_11") 
 ```
 
@@ -114,11 +104,11 @@ O mapa da área de estudo bem como a projeção do mapa anotada no shapefile sã
 ```{r carregar_reparar_mostrar_shape_entrada, eval=T, include=T}
 shape_area_estudo <- nome_shape_area_estudo %>%
   readOGR(verbose = F) %>%
-  repair_shapefile()
+  repair_shp()
 
 
 mapa_tmp <- shape_area_estudo %>% 
-  map_of_area("Bacia Paraná-Paraguai")
+  area_map(nome_area_estudo)
 
 # Caso você deseje um mapa com maior interatividade, por exemplo, com zoom, use
 # a função ggplotly(mapa_tmp) ao invés da função plot(mapa_tmp). A função
@@ -134,23 +124,23 @@ mapa_tmp
 Dependendo da projeção desejada, deve-se reprojetar o shape. 
 ```{r reprojetar_shape_entrada, eval=T, include=T}
 shape_area_estudo <- shape_area_estudo %>% 
-  reproject_shapefile(projecao_desejada)
+  spTransform(CRS(projecao_desejada))
 
 mapa_tmp <- shape_area_estudo %>% 
-  map_of_area("Bacia Paraná-Paraguai")
+  area_map(nome_area_estudo)
           
 mapa_tmp
 ```
 
 
-Em alguns casos algumas áreas de tamanho muito pequeno devem ser removidas. Para tanto, os poligonos devem ser desagregados e apenas os maiores que uma área mínima desejada são mantidos. Deve-se lembrar que a unidade de medida da área deve obedecer ao tipo de projeção, em metros ou em graus.
+Em alguns casos algumas áreas de tamanho muito pequeno devem ser removidas. Para tanto, os polígonos devem ser desagregados e apenas os maiores que uma área mínima desejada são mantidos. Deve-se lembrar que a unidade de medida da área deve obedecer ao tipo de projeção, em metros ou em graus.
 
 ```{r remover_areas_pequenas, eval=T, include=T}
 shape_area_estudo <- shape_area_estudo %>% 
-  areas_greater_than(tamanho_area_limite)
+  greater_than(tamanho_area_limite)
 
 mapa_tmp <- shape_area_estudo %>% 
-  map_of_area("Bacia Paraná-Paraguai", crs_subtitle = F)
+  area_map(nome_area_estudo, crs_subtitle = F)
           
 mapa_tmp
 ```
@@ -177,7 +167,7 @@ if (nome_shape_grid_estudo %>% file_exists()== F){
   shape_grid_estudo <- nome_shape_grid_estudo %>% readOGR(verbose = F)
 }
 
-map_of_area(shape_area_estudo) + 
+area_map(shape_area_estudo) + 
               geom_polygon(data = fortify(shape_grid_estudo), 
                            aes(x = long, y = lat, group = group), 
                            colour = "#4d4d4d", 
@@ -185,31 +175,6 @@ map_of_area(shape_area_estudo) +
 ```
 
 ## Uma segunda parte do geoprocessamento é o re-escalonamento das variáveis
-
-### Re-escalonamento do SRTM 
-
-```{r geracao_shape_srtm, eval=T, include=T}
-if (nome_shape_srtm %>% file_exists() == F){
-  grid_srtm <- shape_grid_estudo %>% 
-      add_raster(nome_raster_srtm, nome_var_srtm, largura_celula, altura_celula)
-    
-  nome_shape_srtm %>%
-    path_dir() %>% 
-    dir_create()
-  
-  grid_srtm %>% writeOGR(
-      dsn = nome_shape_srtm, 
-      layer=".", 
-      driver="ESRI Shapefile"
-    )
-} else {
-  grid_srtm <- nome_shape_srtm %>% readOGR(verbose = F)
-}
-
-grid_srtm %>%
-  fortify_join() %>%
-  map_of_area(fill="srtm")
-```
 
 ### Re-escalonamento das variáveis no presente
 
@@ -219,7 +184,7 @@ if (nome_shape_presente %>% file_exists() == F) {
     dir_ls() 
   
   grid_variaveis_presente <- shape_grid_estudo %>% 
-    add_raster(arquivos_raster_presente, nomes_variaveis_presente, largura_celula, altura_celula)
+    add_raster(pasta_rasters_presente, largura_celula, altura_celula, nomes_variaveis_presente)
     
   nome_shape_presente %>% 
     path_dir() %>% 
@@ -236,7 +201,7 @@ if (nome_shape_presente %>% file_exists() == F) {
 
 grid_variaveis_presente %>%
   fortify_join() %>%
-  map_of_area(fill="bio_01")
+  area_map(fill=grid_variaveis_presente@data %>% names() %>% pluck(grid_variaveis_presente@data %>% length()))
 ```
 
 O `mapview` pode ser usado aqui também para verificação do shapefile gerado. A dica é usar o parâmetro `zcol` para que as diferentes variáveis possam ser visualizadas como camadas `mapview(grid_variaveis_presente, zcol=c("bio_01", "bio_02", "bio_03"))`.  

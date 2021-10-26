@@ -3,6 +3,8 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.width = 12,
 
 # Geoprocessamento
 library(raster)                              # manipulação de rasters
+library(terra)                              # manipulação de rasters
+detach("package:terra", unload=T)
 library(rgdal)                               # readOGR, ler arquivos raster e shapefile
 library(rasterDT)                            # rasterização
 library(sf)                                  # manipulação de formas geométricas com interface com gdal, rgeos e proj4g
@@ -37,7 +39,7 @@ library(sdm)                                 # modelagem de distribuição de es
 library(FactoMineR)                          # PCA
 library(rdist)                               # distancia euclideana
 library(usdm)                                # vif
-library(clusternor)                          # xmeans clustering
+#library(clusternor)                          # xmeans clustering
 library(ade4)                                # Enfa
 
 # Miscelânea
