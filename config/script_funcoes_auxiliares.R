@@ -459,11 +459,10 @@ render_chunk_as_html <- function(){
 }
 
 fortify_join <- function(shp){
-  shp_temp <- fortify(shp)
-  shp_temp$id <- (shp_temp$id %>% as.integer())
-  
-  shp_temp <- shp_temp %>% 
-    left_join(shp@data %>% rowid_to_column("id"))
+  shp_temp <- shp %>% 
+    fortify(region="cell_id") %>%
+    mutate(id = as.integer(id)) %>%
+    left_join(shp@data, by=c("id"="cell_id"))
   
   return(shp_temp)
 }

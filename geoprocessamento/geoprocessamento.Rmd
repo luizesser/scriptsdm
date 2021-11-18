@@ -64,7 +64,7 @@ if (!dir_exists("output_data")){
 
 ```{r variaveis_controle, eval=T, include=T}
 # Projeção usada para construção da grid de estudo e do reescalonamento das variáveis.
-projecao_desejada <- "+init=epsg:6933"
+projecao_desejada <- "epsg:6933"
 
 # Tamanho de área mínima (em metros quadrados) de polígonos a serem mantidos durante a geração da grid. 
 tamanho_area_limite <- 8000 * 8000
@@ -76,7 +76,7 @@ altura_celula = 10000
 # Nomes das variáveis do shapefile da área de estudo que serão mantidas durante o reescalonamento.
 # Estabelecer o nome correto -- no maximo 10 caracteres -- para as variáveis. 
 # Caso não queira manter nenhuma, use "list()". Caso queira todas, use NULL 
-nomes_variaveis_grid <-  NULL # c("hyriv_i", "next_do", "main_ri", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "endorhe", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng")
+nomes_variaveis_grid <-  list() # c("hyriv_i", "next_do", "main_ri", "length_", "dist_dn", "dist_up", "catch_s", "upland_", "endorhe", "dis_av_", "ord_str", "ord_cla", "ord_flo", "hybas_l", "shp_lng")
 
 
 # Nome das variáveis no presente do raster que serão mantidas durante o reescalonamento. 
