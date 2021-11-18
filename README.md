@@ -6,7 +6,7 @@
 
 # Preparação do ambiente para execução do script
 
-Obs: Se vc estiver usando as workstations ***Windows** do nupelia, deve primeiro abrir o rstudio, digitar no console o comando: options(repos = c(CRAN = "https://mran.revolutionanalytics.com/snapshot/2020-04-24")); e, atualizar todos os pacotes. Se o RStudio pedir a qualquer momento para reiniciar, não reinicie.
+Obs: Se vc estiver usando as workstations **Windows** do nupelia, deve primeiro abrir o rstudio, digitar no console o comando: options(repos = c(CRAN = "https://mran.revolutionanalytics.com/snapshot/2020-04-24")); e, atualizar todos os pacotes. Se o RStudio pedir a qualquer momento para reiniciar, não reinicie.
 
 
 1. Baixar o maxent.jar e colocá-lo na mesma pasta deste documento
