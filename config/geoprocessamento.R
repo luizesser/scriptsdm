@@ -102,7 +102,9 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
       as("SpatialPolygonsDataFrame")
   } 
   
-
+  shp@data <- shp@data %>%
+    rowid_to_column("cell_id")
+  
   shp_tmp_file <- tempfile() %>% paste0(".shp")
   shp %>%
     writeOGR(
@@ -142,9 +144,7 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
   # https://gis.stackexchange.com/questions/192771/how-to-speed-up-raster-to-polygon-conversion-in-r/357792#357792
   
   crs(shp_grid) <- crs(shp)
-  
-  shp_grid@data <- shp_grid@data %>%
-    rowid_to_column("cell_id")
+
   
   grid_cells <- shp_grid %>%
     gIntersects(
@@ -327,7 +327,7 @@ add_raster <- function(shp, raster_folder=NULL, cell_width=0, cell_height=0, var
     raster_reescaled_countour_masked %>%
       as.list() %>%
       map_dfc(~ .x %>% values() %>% discard(is.na) %>% as.data.frame()) %>%
-      rename_all(~ var_names)
+      rename_all(~ (var_names %>% unlist()))
   )
   
   return(shp_grid)
