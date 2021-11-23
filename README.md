@@ -21,10 +21,11 @@ Obs: Se vc estiver usando as workstations **Windows** do nupelia, deve primeiro 
 5. Instalar e carregar o pacote devtools (execute os comandos usando o console do RStudio)
    * `install.packages("devtools")`
    * `library(devtools)`
-6. Instalar o pacote sdm e os pacotes dos quais ele depende (execute os comandos usando o console do RStudio)
+6. Se estiver usando **Windows**, nas workstations do nupélia ou computador pessoal, baixar e instalar o Java JDK a partir daqui https://www.oracle.com/java/technologies/downloads/#java11-windows
+7. Instalar o pacote sdm e os pacotes dos quais ele depende (execute os comandos usando o console do RStudio)
    * `install.packages("sdm")`
    * `library(sdm)`
    * `installAll()`
-7. Instalar todos os outros pacotes necessários (execute os comandos usando o console do RStudio)
+8. Instalar todos os outros pacotes necessários (execute os comandos usando o console do RStudio)
    * `install.packages(c("raster", "terra", "rgdal", "rasterDT", "sf", "rgeos", "gdalUtils", "stars", "maptools", "magrittr", "ggplot2", "patchwork", "cowplot", "plotly", "mapview", "ggfortify", "scales", "factoextra", "paran", "Rtsne", "ggcorrplot", "DT", "parallel", "snow", "sdm", "FactoMineR", "rdist", "usdm", "ade4", "tidyverse", "purrrlyr", "here", "fs", "stringr", "vroom", "janitor", "snakecase", "lubridate", "stars", "sf", "ncdf4", "tidync")`          
 
