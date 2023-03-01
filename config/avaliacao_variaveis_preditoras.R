@@ -13,12 +13,19 @@ add_var_shp <- function(df, shp){
 get_var_shp <- function(shp){
   if (is.character(shp)){
     shp <- shp %>% 
-      readOGR(verbose = F) 
-  }
-  shp@data <- shp@data %>%
-    select(-(c("id_celula") %>% any_of()))
+      st_read() 
+  } 
   
-    return(shp@data)
+  if(any(class(shp) == 'SpatialPolygonsDataFrame')){
+    new_data <- shp@data %>% select(-(c("id_celula") %>% any_of()))
+    return(new_data)
+  }
+  
+  if(any(class(shp) == 'sf')){
+    sp_data <- as.data.frame(shp) %>% subset(select = -c(id_celula, geometry))
+    return(sp_data)
+  }
+  
 }
 
 remove_var <- function(df, var_names){

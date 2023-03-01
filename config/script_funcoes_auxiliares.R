@@ -3,8 +3,8 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.width = 12,
 
 # Geoprocessamento
 library(raster)                              # manipulação de rasters
-library(terra)                              # manipulação de rasters
-detach("package:terra", unload=T)
+#library(terra)                              # manipulação de rasters
+#detach("package:terra", unload=T)
 library(rgdal)                               # readOGR, ler arquivos raster e shapefile
 library(rasterDT)                            # rasterização
 library(sf)                                  # manipulação de formas geométricas com interface com gdal, rgeos e proj4g
@@ -92,14 +92,14 @@ if (interactive()){
 #---------------------------------------------------------------------------------------------
 # Executa a predição a partir dos modelos treinados e transforma dados de suitability em dados de frequencia e, posteriormente, em presença/ausência
 
-# Essa função recebe como entrada: os modelos treinados; um dataframe em que linhas são as células da grid e as colunas as varáveis 
-# preditoras; e uma lista com os nomes dos algoritmos de predição, disponíveis dentro dos modelos treinados,  para fazer a predição.
+# Essa função recebe como entrada: um dataframe em que linhas são as células da grid e as colunas as varáveis 
+# preditoras; os modelos treinados; e uma lista com os nomes dos algoritmos de predição, disponíveis dentro dos modelos treinados,  para fazer a predição.
 # A predição é feita para cada célula da grid com cada um dos diversos modelos dos diversos algoritmos de predição desejados. 
 # Um limiar é usado para determinar se, em uma dada célula, existe presença ou ausência. O resultado é que, haverá uma matriz
 # M x N, onde M são as células e N são as predições dos diversos modelos dos diversos algoritmos. Cada célula terá valor 0 ou 1,
 # indicando presença ou ausência na célula. Como podem (e muito provavelmente) haverão diversos modelos de um mesmo algoritmo 
-# (em função do uso de replicações como cross-validation ou bootstraping) que indicará ausencia para algumas execuções e presença
-# para outras execuções, é necessário fazer um consenso para cada um dos algoritmos em ca célula. O consenso é a média dos 
+# (em função do uso de replicações como cross-validation ou bootstraping) que indicará ausência para algumas execuções e presença
+# para outras execuções, é necessário fazer um consenso para cada um dos algoritmos em cada célula. O consenso é a média dos 
 # valores da célula para cada um dos algoritmos. Assim, o resultado é uma matriz M x N, onde M são as células da grid e N são os 
 # consensos (médias para aquele algoritmo). O valor de cada célula será um valor entre 0 e 1. 
 DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, lista_thresh=NULL){
@@ -126,7 +126,7 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
     }
   }
   
-  detalhes_modelos <- getModelInfo(m_treinados) %>% 
+  detalhes_modelos <- m_treinados@run.info %>% 
     filter(method %in% algoritmo_predicao) %>%
     select(modelID, method)
   
@@ -145,68 +145,123 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
   return(predi_temp)
 }
 
+
 # ------------------------------------------------------------------------------------------------------------------------
-
-mapaDistrConsenso <- function(df_pred, shp_estudo){
-  shp_estudo@data <- df_pred
-  df_temp <- shp_estudo %>%
-    fortify() %>%
-    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
-    mutate(id_celula=id)
+mapaDistrConsenso <- function(df_pred, shp_estudo, returnRasters=F){
+  shp_estudo <- cbind(shp_estudo, df_pred)
+  df <- as.data.frame(shp_estudo)
   
-  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
-    mapa_temp <- ggplot(data = df_temp) + 
-      aes(x = long, y = lat, group = group, text=consenso) +
-      geom_polygon(aes(fill = as.factor(consenso))) +
-      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
-      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-      coord_equal() 
+  if(length(unique(df$consenso)) <= 2){
+    df$consenso <- as.factor(df$consenso)
+    mapa_temp <- ggplot(as.data.frame(df)) +
+      aes_string(x = 'x', y = 'y', fill = "consenso") +
+      geom_tile() +
+      scale_fill_brewer(palette = "Set1")
   } else {
-    mapa_temp <- ggplot(data = df_temp) + 
-      aes(x = long, y = lat, group = group, fill=consenso, text=consenso) +
-      geom_polygon() +
-      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
-      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-      coord_equal()
+    mapa_temp <- ggplot(df) +
+      aes_string(x = 'x', y = 'y', fill = "consenso") +
+      geom_tile() +
+      scale_fill_continuous(low="red3", high="blue3", limits=c(0,1))
   }
-  return (mapa_temp)
+  if(returnRasters==T){
+    st_rasters <- st_rasterize(shp_estudo %>% dplyr::select("consenso", geometry))
+    return (st_rasters)
+  } else {
+    return(mapa_temp)
+  }
 }
+#mapaDistrConsenso <- function(df_pred, shp_estudo){
+#  shp_estudo@data <- df_pred
+#  df_temp <- shp_estudo %>%
+#    fortify() %>%
+#    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
+#    mutate(id_celula=id)
+#  
+#  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
+#    mapa_temp <- ggplot(data = df_temp) + 
+#      aes(x = long, y = lat, group = group, text=consenso) +
+#      geom_polygon(aes(fill = as.factor(consenso))) +
+#      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
+#      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
+#      coord_equal() 
+#  } else {
+#    mapa_temp <- ggplot(data = df_temp) + 
+#      aes(x = long, y = lat, group = group, fill=consenso, text=consenso) +
+#      geom_polygon() +
+#      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
+#      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
+#      coord_equal()
+#  }
+#  return (mapa_temp)
+#}
 
-mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos){
-  shp_estudo@data <- df_pred
+mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos, returnRasters=F){ ### Output=lista fazer outra função pra plotar uma imagem com os ids da lista.
+  shp_estudo <- cbind(shp_estudo, df_pred)
   nome_metodos <- nome_metodos %>% 
     to_snake_case() %>% 
     abbreviate(minlength = 10) %>%
     unname()
-  
-  df_temp <- shp_estudo %>%
-    fortify() %>%
-    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
-    mutate(id_celula=id)
-  
-  df_temp <-  df_temp %>%
-    gather(modelo, consenso, any_of(nome_metodos))
-  
-  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
-    mapa_temp <- ggplot(data = df_temp) + 
-      aes(x = long, y = lat, group = group) +
-      geom_polygon(aes(fill = as.factor(consenso))) +
-      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
-      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-      coord_equal() +
-      facet_wrap(~modelo)
+  df <- as.data.frame(shp_estudo)
+  if(length(unique(df[,nome_metodos[1]])) <= 2){
+    cols <- colnames(df) %in% nome_metodos
+    df[,cols] %<>% lapply(function(x){as.factor(x)}) 
+    mapa_temp <- lapply(nome_metodos, function(algo){
+      ggplot(as.data.frame(df)) +
+        aes_string(x = 'x', y = 'y', fill = algo) +
+        geom_tile() +
+        scale_fill_brewer(palette = "Set1")
+    })
   } else {
-    mapa_temp <- ggplot(data = df_temp) + 
-      aes(x = long, y = lat, group = group, fill=consenso) +
-      geom_polygon() +
-      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
-      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-      coord_equal() +
-      facet_wrap(~modelo) 
+    mapa_temp <- lapply(nome_metodos, function(algo){
+      ggplot(as.data.frame(df)) +
+        aes_string(x = 'x', y = 'y', fill = algo) +
+        geom_tile() +
+        scale_fill_continuous(low="red3", high="blue3", limits=c(0,1))
+    })
   }
-  
-  return (mapa_temp)
+  if(returnRasters==T){
+    st_rasters <- sapply(nome_metodos, function(algo){st_rasterize(shp_estudo %>% dplyr::select(algo, geometry))}, simplify=F, USE.NAMES=TRUE)
+    return (st_rasters)
+  } else {
+    return(mapa_temp)
+  }
 }
+
+#mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos){
+#  shp_estudo@data <- df_pred
+#  nome_metodos <- nome_metodos %>% 
+#    to_snake_case() %>% 
+#    abbreviate(minlength = 10) %>%
+#    unname()
+#  
+#  df_temp <- shp_estudo %>%
+#    fortify() %>%
+#    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
+#    mutate(id_celula=id)
+#  
+#  df_temp <-  df_temp %>%
+#    gather(modelo, consenso, any_of(nome_metodos))
+#  
+#  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
+#    mapa_temp <- ggplot(data = df_temp) + 
+#      aes(x = long, y = lat, group = group) +
+#      geom_polygon(aes(fill = as.factor(consenso))) +
+#      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
+#      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
+#      coord_equal() +
+#      facet_wrap(~modelo)
+#  } else {
+#    mapa_temp <- ggplot(data = df_temp) + 
+#      aes(x = long, y = lat, group = group, fill=consenso) +
+#      geom_polygon() +
+#      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
+#      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
+#      coord_equal() +
+#      facet_wrap(~modelo) 
+#  }
+#  
+#  return (mapa_temp)
+#}
 
 mapaDistrModelos <- function(df_distr, grid_estudo, nome_modelos){
   return (mapaDistrMetodos(df_distr, grid_estudo, nome_modelos))

@@ -125,23 +125,32 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
       overwrite=T
     )
   
-  shp_grid <- gdal_rasterize(
-    shp_tmp_file,
-    raster_tmp_file,
-    burn = 0,
-    at = T, 
-    co = c("BIGTIFF=YES"), 
-    a_nodata = "-9999.0",    
-    tr = c(cell_width, cell_height),
-    tap= T,
-    ot = 'Float32',
-    output_Raster = T,
-    te = shp %>% bbox() %>% as("vector"),
-    verbose = T
-  ) %>% 
-    rasterToPolygons() 
+  #shp_grid <- gdal_rasterize(
+  #  shp_tmp_file,
+  #  raster_tmp_file,
+  #  burn = 0,
+  #  at = T, 
+  #  co = c("BIGTIFF=YES"), 
+  #  a_nodata = "-9999.0",    
+  #  tr = c(cell_width, cell_height),
+  #  tap= T,
+  #  ot = 'Float32',
+  #  output_Raster = T,
+  #  te = shp %>% bbox() %>% as("vector"),
+  #  verbose = T
+  #) %>% 
+  #  rasterToPolygons() 
   # https://gis.stackexchange.com/questions/166753/fastest-way-to-convert-big-raster-to-polyline-using-r-or-python/313550#313550
   # https://gis.stackexchange.com/questions/192771/how-to-speed-up-raster-to-polygon-conversion-in-r/357792#357792
+  
+  shp_grid <- terra::rasterize(
+      shp[,1],
+      raster_area,
+      touches = T, 
+      field=shp[,1]@data,
+      fun=max, na.rm=F)
+      
+  shp_grid <- rasterToPolygons(shp_grid, na.rm=F) 
   
   crs(shp_grid) <- crs(shp)
 
@@ -258,29 +267,42 @@ add_raster <- function(shp, raster_folder=NULL, cell_width=0, cell_height=0, var
     )
   
   raster_file_reescaled_countour <- tempfile() %>% paste0(".tif")
-  raster_reescaled_countour <- gdalwarp(
+  raster_reescaled_countour <- gdalwarp( ### sp::st_warp
     raster_tmp_file,
     raster_file_reescaled_countour,
     s_srs = raster::crs(raster_stack),
     t_srs = raster::crs(shp),
     cutline = shp_countour_file,
-    crop_to_cutline = T,
-    r = 'average',
-    tr = c(cell_width, cell_height),
-    tap = T,
-    te = shp %>% bbox() %>% as("vector"),
-    te_srs = raster::crs(shp),
+    crop_to_cutline = T, 
+    r = 'average', # resampling method
+    tr = c(cell_width, cell_height), # target resolution
+    tap = T, # should output extent include minimum extent?
+    te = shp %>% bbox() %>% as("vector"), #extent of output
+    te_srs = raster::crs(shp), # crs of output
     dstnodata = "-9999.0",
-    ot = 'Float32',
+    ot = 'Float32', # data type
     co = c("BIGTIFF=YES"), #"COMPRESS=DEFLATE", "PREDICTOR=2","ZLEVEL=9"),
     #wo = c("CUTLINE_ALL_TOUCHED=TRUE"),
-    multi = T,
-    output_Raster = T,
+    multi = T, # multithread
+    output_Raster = T, # sai um rasterBrick
     overwrite = T,
     verbose = T
   ) %>% 
-    raster::crop(shp)
+    terra::crop(shp)
 
+  # Alternative:
+  #          raster_reescaled_countour <- terra::extract(terra::rast(raster_tmp_file),
+  #                                                      terra::vect(shp), 
+  #                                                      fun='mean',
+  #                                                      cells=T, 
+  #                                                      na.rm=T,
+  #                                                      )
+  #          shp <- cbind(shp, raster_reescaled_countour)
+  #          if (!all(shp$cell_id == shp$ID)){
+  #            stop("Reescaling failed: cell IDs do not match.")
+  #          }
+  # End of alternative.
+  
   raster_reescaled_countour_masked <- raster_reescaled_countour %>% 
     terra::rast() 
   
