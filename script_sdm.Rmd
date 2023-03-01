@@ -10,13 +10,15 @@ output:
 editor_options: 
   chunk_output_type: inline
 ---
+
+```{=html}
 <style>
 div.main-container {
     width: 100%;
     max-width: unset;
 }
 </style>
-
+```
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 source("./config/script_funcoes_auxiliares.R") 
 ```
