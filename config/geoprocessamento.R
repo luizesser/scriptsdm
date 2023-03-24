@@ -74,6 +74,12 @@ greater_than <- function(shp_area, inf_limit=0) {
 }
 
 
+#shp = shape_area_estudo 
+#cell_width = largura_celula 
+#cell_height = altura_celula
+#var_names = nomes_variaveis_grid
+
+
 make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid=T){
   if (!(shp %>% is("Spatial"))){
     stop("Arquivo da área de estudo inválido!")
@@ -124,6 +130,7 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
       options = c("dstnodata =-9999.0"),
       overwrite=T
     )
+
   
   #shp_grid <- gdal_rasterize(
   #  shp_tmp_file,
@@ -147,9 +154,10 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
       shp[,1],
       raster_area,
       touches = T, 
-      field=shp[,1]@data,
-      fun=max, na.rm=F)
-      
+      field=shp[,1]@data, na.rm=F)
+  
+  values(shp_grid) <- seq(1:ncell(shp_grid))
+  
   shp_grid <- rasterToPolygons(shp_grid, na.rm=F) 
   
   crs(shp_grid) <- crs(shp)
@@ -164,24 +172,12 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
     ) %>%
     compact()
   
+  ###
   shp_grid <- shp_grid[names(grid_cells) %>% as.integer(),] %>% 
     spChFIDs(as.character(1:length(grid_cells)))
+  ###
   
-  shp_grid@data <- grid_cells %>%
-    map_dfr(as_tibble, .id="cell_id") %>% 
-    rename(line_id=value) %>% 
-    left_join(
-      shp_area_bkp@data %>% 
-        rowid_to_column("line_id")
-    ) %>%
-    select(-line_id) %>%
-    mutate(cell_id=as.integer(cell_id)) %>%
-    group_by(cell_id) %>% 
-    summarise_all(~ ifelse(is.numeric(.), mean(.), .), na.rm = TRUE) %>%
-    ungroup() %>%
-    select(-cell_id) %>%
-    rowid_to_column("cell_id")
-
+  names(shp_grid) <- "cell_id"
   
   shp <- shp_grid
   
@@ -196,169 +192,82 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
   return(shp)
 }
 
-add_raster <- function(shp, raster_folder=NULL, cell_width=0, cell_height=0, var_names=NULL){
+
+
+add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
   if (!(shp %>% is("Spatial"))){
     stop("Arquivo da área de estudo inválido!")
   }
   if (is.null(raster_folder)){
     stop("Pasta de rasters inválida!")
   }
-  if (cell_width<=0 || cell_height<=0){
-    stop("Tamanho de célula inválido!")
-  }
-  
   if (is.null(var_names)){
     var_names <- raster_folder %>%
       list.files()
   } 
-  
-  raster_list <- raster_folder %>%
-    list.files(full.names = T) %>% 
-    keep(~ .x %>% str_detect(fixed(var_names, ignore_case = T)) %>% any())
+  if(is.null(scenario)){ # if scenario == NULL, we are using current data
+    l <- raster_folder %>% list.files(full.names = T)
+    var_names2 <- paste0(var_names, '\\D')
+    raster_list <- l[grep(paste(var_names2,collapse="|"),l)]
+      
+    if (length(raster_list)!=length(var_names)){
+      stop("Não é possível determinar com exatidão quais rasters serão usados a partir da lista de nomes informada!")
+    }
     
-  if (length(raster_list)!=length(var_names)){
-    stop("Não é possível determinar com exatidão quais rasters serão usados a partir da lista de nomes informada!")
+    raster_stack <- raster_list %>%
+      stack() %>%
+      tryCatch(error = function(e) e)
+    
+  } else { # if scenario != NULL, we are using future data
+    l <- raster_folder %>% list.files(full.names = T)
+    raster_stack <- l[grep(scenario,l)] %>%
+      stack() %>%
+      tryCatch(error = function(e) e)
   }
   
-  raster_stack <- raster_list %>%
+  # if tryCatch returns error, than we need to work on raster data:
+  # 1. arrumar todos os rasters (extensão/resolução/...)
+  if(any(class(raster_stack)=='error')){
+    stop("Rasters diferentes não podem ser juntos em um stack.")
+  }
+  
+  if(!is.null(scenario)){
+    names(raster_stack) <- paste0('bio_', 1:19)
+    raster_stack <- raster_stack[[unlist(var_names)]]
+  } else {
+    raster_stack <- raster_stack[[str_sort(names(raster_stack), numeric=T)]]
+    names(raster_stack) <- var_names
+  }
+  
+  # 2. Obter bbox do shape
+  # 3. crop mask stack
+  raster_stack <- raster_stack %>%
+    crop(shp) %>%
+    mask(shp) %>%
     stack()
-
-  raster_tmp_file <- tempfile() %>% paste0(".tif")
-  raster_stack %>% 
-    writeRaster(
-      raster_tmp_file,
-      format = "GTiff",
-      bylayer = F, #bylayer = T,
-      #suffix = lista_rasters_bio %>% names(),
-      options = c("dstnodata =-9999.0"),
-      overwrite=T,
-    )
   
-  shp_countour_file <- tempfile() %>% paste0(".shp")
-  shp %>%
-    raster::aggregate(dissolve=T) %>%
-    #rgeos::gBuffer(width=-(min(c(cell_width, cell_height)))/10, capStyle = "SQUARE", joinStyle = "BEVEL") %>%
-    #rgeos::gUnionCascaded() %>%
-    as("SpatialPolygonsDataFrame") %>% 
-    writeOGR(
-      dsn = shp_countour_file, 
-      layer=".", 
-      driver="ESRI Shapefile",
-      overwrite=T
-    )
+  v <- list()
+  for(i in shp$cell_id){
+    sc <- subset(shp, cell_id==i)
+    vals <- as.vector(terra::extract(raster_stack, sc, fun=mean, na.rm=T))
+    v[[i]] <- vals
+  }
   
-  shp_area_file <- tempfile() %>% paste0(".shp")
-  shp %>%
-    writeOGR(
-      dsn= shp_area_file, 
-      layer=".", 
-      driver="ESRI Shapefile",
-      overwrite=T
-    )
-  
-  shp_grid_file <- tempfile() %>% paste0(".shp")
-  shp %>%
-    as("SpatialPolygonsDataFrame") %>%
-    writeOGR(
-      dsn= shp_grid_file, 
-      layer=".", 
-      driver="ESRI Shapefile",
-      overwrite=T
-    )
-  
-  raster_file_reescaled_countour <- tempfile() %>% paste0(".tif")
-  raster_reescaled_countour <- gdalwarp( ### sp::st_warp
-    raster_tmp_file,
-    raster_file_reescaled_countour,
-    s_srs = raster::crs(raster_stack),
-    t_srs = raster::crs(shp),
-    cutline = shp_countour_file,
-    crop_to_cutline = T, 
-    r = 'average', # resampling method
-    tr = c(cell_width, cell_height), # target resolution
-    tap = T, # should output extent include minimum extent?
-    te = shp %>% bbox() %>% as("vector"), #extent of output
-    te_srs = raster::crs(shp), # crs of output
-    dstnodata = "-9999.0",
-    ot = 'Float32', # data type
-    co = c("BIGTIFF=YES"), #"COMPRESS=DEFLATE", "PREDICTOR=2","ZLEVEL=9"),
-    #wo = c("CUTLINE_ALL_TOUCHED=TRUE"),
-    multi = T, # multithread
-    output_Raster = T, # sai um rasterBrick
-    overwrite = T,
-    verbose = T
-  ) %>% 
-    terra::crop(shp)
-
-  # Alternative:
-  #          raster_reescaled_countour <- terra::extract(terra::rast(raster_tmp_file),
-  #                                                      terra::vect(shp), 
-  #                                                      fun='mean',
-  #                                                      cells=T, 
-  #                                                      na.rm=T,
-  #                                                      )
-  #          shp <- cbind(shp, raster_reescaled_countour)
-  #          if (!all(shp$cell_id == shp$ID)){
-  #            stop("Reescaling failed: cell IDs do not match.")
-  #          }
-  # End of alternative.
-  
-  raster_reescaled_countour_masked <- raster_reescaled_countour %>% 
-    terra::rast() 
-  
-  raster_reescaled_countour_masked <- raster_reescaled_countour_masked %>%
-    terra::mask(shp %>% terra::vect(), touches=F) %>% 
-    raster::stack()
-
-  raster_grid <- gdal_rasterize(
-    shp_area_file,
-    tempfile() %>% paste0(".tif"),
-    #burn = 0,
-    a = "cell_id",
-    #at = T, 
-    co = c("BIGTIFF=YES"), 
-    a_nodata = "-9999.0",    
-    tr = c(cell_width, cell_height),
-    #tap= T,
-    ot = 'Float32',
-    output_Raster = T,
-    te = shp %>% bbox() %>% as("vector"),
-    verbose = T
-  )
-  
-  raster_grid <- raster_grid %>% 
-    terra::rast() %>%
-    terra::mask((raster_reescaled_countour_masked %>% terra::rast())[[1]])
-
-
-  grid_cells <- raster_grid %>%
-    as.vector() %>%
-    discard(is.na)
-
-  shp@data <- shp@data %>%
+  v <- v %>% 
+    do.call(rbind,.) %>% 
     as.data.frame()
   
-  shp_grid <- shp[grid_cells %>% as.integer(),] 
-
-  shp_grid@data$cell_id <- 1:length(grid_cells)
-  shp_grid %>% 
-    spChFIDs(as.character(1:length(grid_cells)))
-
-
-  shp_grid@data <- shp_grid@data %>% bind_cols(
-    raster_reescaled_countour_masked %>%
-      as.list() %>%
-      map_dfc(~ .x %>% values() %>% discard(is.na) %>% as.data.frame()) %>%
-      rename_all(~ (var_names %>% unlist()))
-  )
+  # 7. rasteriza shape (dentro do stars)
+  st_rasterize(st_as_sf(cbind(shp, v[1:28,])))
   
-  return(shp_grid)
+  shp_raster <- shp %>%
+    cbind(v) %>%
+    st_as_sf() %>%
+    st_rasterize()
+  
+  names(shp_raster)[-(1:3)] <- names(raster_stack)
+  
+  return(shp_raster)
 }
-
-
-
-
-
-
 
 

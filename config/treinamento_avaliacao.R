@@ -15,7 +15,7 @@ tsne_plot <- function(df, df_bg, sp_names){
   df_bg_tsne <- df_pred %>% 
     select(c(sp_names[[sp]], colnames(df))) %>% 
     unique()
-  
+
   tsne_bg <- Rtsne(as.matrix(df_bg_tsne), perplexity = perp)
   
   esp_colors <- df_pred %>% 
@@ -33,6 +33,15 @@ tsne_plot <- function(df, df_bg, sp_names){
 }
 
 fit_data <- function(df_pa, df_var, df_bg){
+  if('geometry' %in% colnames(df_pa)){
+    df_pa %<>% select(-c('geometry'))
+  }
+  if('cell_id' %in% colnames(df_bg[[1]])){
+    df_bg %<>% lapply(function(x) { x["cell_id"] <- NULL; x })
+  }
+  if('cell_id' %in% colnames(df_var)){
+    df_var %<>% select(-c('cell_id'))
+  }
   fitted_data <- list()
   for (sp in colnames(df_pa)){
     predict_data <- sdmData(
@@ -104,7 +113,7 @@ sp_thresh <- function(t_models, thr_criteria){
       ), 
       opt=thr_criteria
     ), 
-    .id = "especie"
+    .id = "species"
     )
 }
 
@@ -115,17 +124,17 @@ sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
   sp_name %>%
     sp_model_from_folder(folder) %>%
     sp_thresh(thr_criteria) %>%
-    mutate(especie_name=sp_name)
+    mutate(species_name=sp_name)
 }
 
 thresh_mean <- function(t_models, df_thr){ #, pred_methods){
   t_models %>% 
-    map_dfr(.f=function(x){rename(x@run.info, especie="species") %>% 
-                           mutate_if(.,is.factor, as.character)}, .id="especie") %>%
+    map_dfr(.f=function(x){rename(x@run.info, species="species") %>% 
+                           mutate_if(.,is.factor, as.character)}, .id="species") %>%
     #filter(method %in% pred_methods) %>%
-    select(especie, modelID, method) %>%
-    inner_join(df_thr %>% select(especie, modelID, threshold), by=c("especie","modelID")) %>%
-    group_by(especie, method) %>% 
+    select(species, modelID, method) %>%
+    inner_join(df_thr %>% select(species, modelID, threshold), by=c("species","modelID")) %>%
+    group_by(species, method) %>% 
     summarize(mean = mean(threshold), .groups = 'rowwise') %>%
     return()
 }
@@ -181,13 +190,13 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
     
     colnames(df_pred_freq) <- pred_methods
     df_pred_freq <- df_pred_freq %>% 
-      mutate(consenso=rowMeans(.))
+      mutate(consensus=rowMeans(.))
     
     # Consenso usando presenca/ausencia
     df_pred_pres_aus <- df_pred_freq %>%
-      select(-consenso) %>%
+      select(-consensus) %>%
       mutate_all(~ ifelse(. <= 0.5, 0, 1)) %>%
-      mutate(consenso = rowMeans(.) %>% round(., digits = 0))
+      mutate(consensus = rowMeans(.) %>% round(., digits = 0))
     
     df_pred_freq <- df_pa %>% 
       select(sp %>% all_of()) %>% 
@@ -218,15 +227,34 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
 }
 
 # TODO: Qual o comportamento da predição para a pasta, sobreescrever sempre ou continuar de onde parou? Qual o comportamento para as outras funções sobreescrever ou continuar?
+
+# Projetar modelos nos cenários
+
+
+
+#df_pa = df_pres_aus
+#scenarios_list =   projection_data
+#models_folder =   pasta_modelos_treinados
+#shp_grid =   shape_grid_estudo
+#pred_methods =   alg_predicao
+#thr_criteria =   criterio_thres
+#output_folder =   pasta_distribuicao_presente
+
+
 predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pred_methods, thr_criteria, output_folder){
-  spp_names <- colnames(df_pa)[-grep("geometry", colnames(df_pa))]
+  if ('geometry' %in% colnames(df_pa)){
+    spp_names <- colnames(df_pa)[-grep("geometry", colnames(df_pa))]
+  } else {
+    spp_names <- colnames(df_pa)
+  }
+  
   for (sp in spp_names){
     t_models <- sp %>%
       sp_model_from_folder(models_folder)
     if (scenarios_list %>% is.data.frame()){
       scenarios_list <- scenarios_list %>%
         list() %>%
-        set_names("cenário")
+        set_names("scenarios")
     }
     
     for (scenario_name in names(scenarios_list)){
@@ -238,27 +266,52 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
           pluck(scenario_name) %>% 
           DRE_predict(t_models %>% pluck(sp), pred_methods, thr_criteria)
         
-        df_pred_freq <- df_pred_freq %>% 
-          mutate(consenso=rowMeans(.))
+        # Consenso
+        #df_pred_freq <- df_pred_freq %>% 
+        #  mutate(consenso=rowMeans(.))
+        consensus <- df_pred_freq %>% rowMeans()
+        
+        # Weighted mean (AUC)
+        df <- cbind(algo=getModelInfo(t_models[[sp]])$method,
+                    getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria))
+        w <- aggregate(df$AUC, by=list(df$algo), FUN=mean)$x
+        wmean_AUC <- apply(df_pred_freq, 1, function(x) sum(x * w))
+        
+        # Weighted mean (TSS)
+        w <- aggregate(df$TSS, by=list(df$algo), FUN=mean)$x
+        wmean_TSS <- apply(df_pred_freq, 1, function(x) sum(x * w))
+       
+        
+        # include ensembles in data.frame
+        df_pred_freq$consensus <- consensus
+        df_pred_freq$wmean_AUC <- wmean_AUC
+        df_pred_freq$wmean_TSS <- wmean_TSS
         
         # Consenso usando presenca/ausencia
         df_pred_pres_aus <- df_pred_freq %>%
-          select(-consenso) %>%
+          select(-consensus) %>%
+          mutate_all(~ ifelse(. <= 0.5, 0, 1)) %>% # mudar de 0.5 para o threshold de df (como? calcular threshold pra projeção?).
+          mutate(consensus = rowMeans(.) %>% round(., digits = 0))
+        
+        # Ensembles:
+        df_pred_pres_aus <- df_pred_freq %>%
+          select(-consensus) %>%
           mutate_all(~ ifelse(. <= 0.5, 0, 1)) %>%
-          mutate(consenso = rowMeans(.) %>% round(., digits = 0))
+          mutate(consensus = rowMeans(.) %>% round(., digits = 0))
+      
         
         df_pred_freq <- rep(sp, nrow(df_pred_freq)) %>% 
           as.data.frame() %>% 
-          rename("especie"=".") %>%
+          rename("species"=".") %>%
           bind_cols(rep(scenario_name, nrow(df_pred_freq)) %>% as.data.frame()) %>%
-          rename("cenario"=".") %>%
+          rename("scenario"=".") %>%
           bind_cols(df_pred_freq)
         
         df_pred_pres_aus <- rep(sp, nrow(df_pred_pres_aus)) %>% 
           as.data.frame() %>% 
-          rename("especie"=".") %>%
+          rename("species"=".") %>%
           bind_cols(rep(scenario_name, nrow(df_pred_pres_aus)) %>% as.data.frame()) %>%
-          rename("cenario"=".") %>%
+          rename("scenario"=".") %>%
           bind_cols(df_pred_pres_aus)
         
         
@@ -528,13 +581,13 @@ model_failures <- function(fitted_data, models_folder){
 #  }
 #}
 
-gerarPseudoAusenciasDRE <- function (shp_pa, df_var, especies, metodo="random", cluster_m="k-means"){
+pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m="k-means"){
   especies <- especies %>% 
     to_snake_case() %>% 
     abbreviate(minlength = 10) %>%
     unname()
   
-  df_pa <- shp_pa %>% subset(select = -c(id_celula, geometry))
+  df_pa <- shp_pa %>% as.data.frame() %>% select(-c('geometry'))
   
   #df_pa <- shp_pa %>% select(all_of(especies)). ## rgdal version
   .add_grupos <- function(a_df, a_df_p, percent_grupos=NA, nro_grupos=NA, cluster_m="k-means"){

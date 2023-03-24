@@ -13,19 +13,21 @@ add_var_shp <- function(df, shp){
 get_var_shp <- function(shp){
   if (is.character(shp)){
     shp <- shp %>% 
-      st_read() 
-  } 
-  
-  if(any(class(shp) == 'SpatialPolygonsDataFrame')){
-    new_data <- shp@data %>% select(-(c("id_celula") %>% any_of()))
-    return(new_data)
+      readOGR() 
   }
+  shp@data <- shp@data %>%
+    select(-(c("cell_id") %>% any_of()))
   
-  if(any(class(shp) == 'sf')){
-    sp_data <- as.data.frame(shp) %>% subset(select = -c(id_celula, geometry))
-    return(sp_data)
-  }
-  
+    return(shp@data)
+}
+
+get_predictors_as_df <- function(shp){
+  df_var_preditoras <- shp %>%
+    readRDS() %>%
+    st_as_sf() %>% 
+    as.data.frame() %>%
+    select(-c('geometry','x_centroid','y_centroid'))
+  return(df_var_preditoras)
 }
 
 remove_var <- function(df, var_names){
@@ -44,9 +46,18 @@ remove_var <- function(df, var_names){
 
 center_scale <- function(df, var_names){
   if (!missing(var_names) && (is.list(var_names) || is.vector(var_names))){
-    df %>%
-    mutate_at(var_names, ~ as.numeric(scale(.))) %>%
-      as.data.frame()
+    if(!all(var_names %in% colnames(df))){
+      print('Not every variable chosen is in data.frame. Keeping only with available variables.')
+      var_names <- var_names[which(var_names %in% colnames(df))]
+      df %>%
+        mutate_at(var_names, ~ as.numeric(scale(.))) %>%
+        as.data.frame()
+    } else {
+      df %>%
+        mutate_at(var_names, ~ as.numeric(scale(.))) %>%
+        as.data.frame()
+    }
+    
   } else {
     df
   }
@@ -64,6 +75,12 @@ corr_plot <- function(df){
     p.mat = df %>% cor_pmat()
   )
 }
+
+
+
+#data=df_var_pca_bio
+#nrEixos=4
+#pcaName="bio"
 
 calc_pca <- function(data, nrEixos=5, pcaName=""){
   a_pca <- data %>% PCA(scale.unit = T, graph = F, ncp = nrEixos)
@@ -88,12 +105,30 @@ calc_pca <- function(data, nrEixos=5, pcaName=""){
   return(a_pca)
 }
 
+proj_pca <- function(a_pca, list_scenarios, vars=NULL){
+  if(is.null(vars)){
+    vars <- rownames(a_pca$var$coord)
+  }
+  s <- lapply(list_scenarios, function(x){
+    p <- x %>% 
+      as.data.frame() %>% 
+      select(all_of(vars)) %>% 
+      center_scale(vars) %>% 
+      predict(a_pca,.)
+    p <- cbind(x, p$coord)
+    ids <- grep(pattern='Dim',colnames(p))
+    colnames(p)[ids] <- colnames(a_pca$var$coord)
+    return(p)
+  })
+  return(s)
+}
+
 dt_pca_summ <- function(a_pca){
   a_pca %>% 
     dimdesc(axes = 1:.$call$ncp) %>% 
     compact(~ .$quanti) %>% 
-    map_df(~ as.data.frame(.$quanti) %>% rownames_to_column("variavel"), .id="dim") %>%
-    select(dim, variavel, correlation) %>% 
+    map_df(~ as.data.frame(.$quanti) %>% rownames_to_column("variables"), .id="dim") %>%
+    select(dim, variables, correlation) %>% 
     pivot_wider(names_from = dim, values_from = correlation) %>%
     mutate_if(is.numeric, ~ round(.,4)) %>%
     datatable(options = list(pageLength = 10, scrollX=T))
@@ -196,8 +231,8 @@ pca_bi_plot <- function(a_pca, pres_aus){
     repel = T,
     pointshape = 21,
     pointsize = 2.5,
-    col.ind = as.factor(ifelse(pres_aus == 1, "Presenca", "Ausencia")),
-    fill.ind = as.factor(ifelse(pres_aus == 1, "Presenca", "Ausencia")),
+    col.ind = as.factor(ifelse(pres_aus == 1, "Presence", "Absence")),
+    fill.ind = as.factor(ifelse(pres_aus == 1, "Presence", "Absence")),
     col.var = "black",
     palette = c("#00AFBB", "#E7B800", "#FC4E07"),
     addEllipses = TRUE,
@@ -227,3 +262,28 @@ comp_pca_retain <- function(factoMinerObject){
   ))
   return(list(broken.stick=n.broken.stick, kaiser.mean=n.kaiser.mean, horn.p = n.horn))
 }
+
+
+get_df_vif <- function(var, pa,var_names=NULL){
+  if(is.null(var_names)){
+    var_names <- colnames(var)
+    var_names <- var_names[!var_names %in% c('cell_id',"x_centroid", "y_centroid", "geometry" )]
+    cat('var_names not informed. Variables detected: ',paste(var_names, collapse=', '))
+  }
+  df_vif <- cbind(as.data.frame(var) %>% select(all_of(var_names)), 
+                  as.data.frame(pa) %>% select(!'geometry'))
+  df_vif %<>% filter(.,!!sym(colnames(pa)[-ncol(pa)])== 1)
+  df_vif[,1:length(var_names)] %>%
+    return()
+}
+
+
+
+
+
+
+
+
+
+
+

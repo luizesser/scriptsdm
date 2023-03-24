@@ -52,7 +52,7 @@ library(vroom)                               # le arquivos csv
 library(janitor)                             # faz limpeza de datasets e nomes de variáveis
 library(snakecase)                           # transformação de strings em snake case
 library(lubridate)                           # manipulação de datas
-
+library(rgbif)                               # download GBIF data.
 
 select <- dplyr::select
 here <- here::here
@@ -62,7 +62,7 @@ options(java.parameters = "-Xmx1g", java.awt.headless="true")
 source(here("config/ggcorrplot.R"))
 source(here("config/xmeans.R"))
 source(here("config/algoritmos_predicao.R"))
-source(here("config/geoprocessamento.R"))
+source(here("config/geoprocessamento_novo.R"))
 source(here("config/ocorrencias.R"))
 source(here("config/avaliacao_variaveis_preditoras.R"))
 source(here("config/treinamento_avaliacao.R"))
@@ -126,7 +126,7 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
     }
   }
   
-  detalhes_modelos <- m_treinados@run.info %>% 
+  detalhes_modelos <- getModelInfo(m_treinados) %>% 
     filter(method %in% algoritmo_predicao) %>%
     select(modelID, method)
   
@@ -145,57 +145,30 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
   return(predi_temp)
 }
 
-
 # ------------------------------------------------------------------------------------------------------------------------
-mapaDistrConsenso <- function(df_pred, shp_estudo, returnRasters=F){
+distribution_map <- function(df_pred, shp_estudo, returnRasters=F){
   shp_estudo <- cbind(shp_estudo, df_pred)
   df <- as.data.frame(shp_estudo)
   
-  if(length(unique(df$consenso)) <= 2){
-    df$consenso <- as.factor(df$consenso)
-    mapa_temp <- ggplot(as.data.frame(df)) +
-      aes_string(x = 'x', y = 'y', fill = "consenso") +
-      geom_tile() +
+  if(length(unique(df$consensus)) <= 2){
+    df$consensus <- as.factor(df$consensus)
+    mapa_temp <- ggplot(st_as_sf(df)) +
+      geom_sf(aes(fill = consensus), color=NA) +
       scale_fill_brewer(palette = "Set1")
   } else {
-    mapa_temp <- ggplot(df) +
-      aes_string(x = 'x', y = 'y', fill = "consenso") +
-      geom_tile() +
-      scale_fill_continuous(low="red3", high="blue3", limits=c(0,1))
+    mapa_temp <- ggplot(st_as_sf(df)) +
+      geom_sf(aes(fill = consensus), color=NA) +
+      scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,1))
   }
   if(returnRasters==T){
-    st_rasters <- st_rasterize(shp_estudo %>% dplyr::select("consenso", geometry))
+    st_rasters <- st_rasterize(shp_estudo %>% dplyr::select("consensus", geometry))
     return (st_rasters)
   } else {
     return(mapa_temp)
   }
 }
-#mapaDistrConsenso <- function(df_pred, shp_estudo){
-#  shp_estudo@data <- df_pred
-#  df_temp <- shp_estudo %>%
-#    fortify() %>%
-#    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
-#    mutate(id_celula=id)
-#  
-#  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
-#    mapa_temp <- ggplot(data = df_temp) + 
-#      aes(x = long, y = lat, group = group, text=consenso) +
-#      geom_polygon(aes(fill = as.factor(consenso))) +
-#      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
-#      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-#      coord_equal() 
-#  } else {
-#    mapa_temp <- ggplot(data = df_temp) + 
-#      aes(x = long, y = lat, group = group, fill=consenso, text=consenso) +
-#      geom_polygon() +
-#      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
-#      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-#      coord_equal()
-#  }
-#  return (mapa_temp)
-#}
 
-mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos, returnRasters=F){ ### Output=lista fazer outra função pra plotar uma imagem com os ids da lista.
+distribution_map_algo <- function(df_pred, shp_estudo, nome_metodos, returnRasters=F){
   shp_estudo <- cbind(shp_estudo, df_pred)
   nome_metodos <- nome_metodos %>% 
     to_snake_case() %>% 
@@ -206,18 +179,14 @@ mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos, returnRasters=F)
     cols <- colnames(df) %in% nome_metodos
     df[,cols] %<>% lapply(function(x){as.factor(x)}) 
     mapa_temp <- lapply(nome_metodos, function(algo){
-      ggplot(as.data.frame(df)) +
-        aes_string(x = 'x', y = 'y', fill = algo) +
-        geom_tile() +
-        scale_fill_brewer(palette = "Set1")
-    })
+      ggplot(st_as_sf(df)) +
+        geom_sf(aes(fill = !!sym(algo)), color=NA) +
+        scale_fill_brewer(palette = "Set1")})
   } else {
     mapa_temp <- lapply(nome_metodos, function(algo){
-      ggplot(as.data.frame(df)) +
-        aes_string(x = 'x', y = 'y', fill = algo) +
-        geom_tile() +
-        scale_fill_continuous(low="red3", high="blue3", limits=c(0,1))
-    })
+      ggplot(st_as_sf(df)) +
+        geom_sf(aes(fill = !!sym(algo)), color=NA) +
+        scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,1))})
   }
   if(returnRasters==T){
     st_rasters <- sapply(nome_metodos, function(algo){st_rasterize(shp_estudo %>% dplyr::select(algo, geometry))}, simplify=F, USE.NAMES=TRUE)
@@ -227,44 +196,29 @@ mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos, returnRasters=F)
   }
 }
 
-#mapaDistrMetodos <- function(df_pred, shp_estudo, nome_metodos){
-#  shp_estudo@data <- df_pred
-#  nome_metodos <- nome_metodos %>% 
-#    to_snake_case() %>% 
-#    abbreviate(minlength = 10) %>%
-#    unname()
-#  
-#  df_temp <- shp_estudo %>%
-#    fortify() %>%
-#    merge(shp_estudo %>% as.data.frame(), by.x="id", by.y=0) %>%
-#    mutate(id_celula=id)
-#  
-#  df_temp <-  df_temp %>%
-#    gather(modelo, consenso, any_of(nome_metodos))
-#  
-#  if (nrow(df_temp %>% filter(!(consenso==0 | consenso==1)))==0){
-#    mapa_temp <- ggplot(data = df_temp) + 
-#      aes(x = long, y = lat, group = group) +
-#      geom_polygon(aes(fill = as.factor(consenso))) +
-#      scale_fill_manual(values=c("darkseagreen2", "tomato")) +
-#      theme(legend.position = "none", axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-#      coord_equal() +
-#      facet_wrap(~modelo)
-#  } else {
-#    mapa_temp <- ggplot(data = df_temp) + 
-#      aes(x = long, y = lat, group = group, fill=consenso) +
-#      geom_polygon() +
-#      scale_fill_continuous(low="darkseagreen2", high="tomato", limits=c(0,1), name = "Adequabilidade") +
-#      theme(axis.text.x = element_blank(), axis.text.y = element_blank(), axis.ticks.x = element_blank(), axis.ticks.y = element_blank()) +
-#      coord_equal() +
-#      facet_wrap(~modelo) 
-#  }
-#  
-#  return (mapa_temp)
-#}
+distribution_map_ensembles <- function(df_pred, shp_estudo, ensemble_method=c('wmean_AUC', 'wmean_TSS'), returnRasters=F){ ### Output=lista fazer outra função pra plotar uma imagem com os ids da lista.
+  shp_estudo <- cbind(shp_estudo, df_pred)
+  ensemble_method <- ensemble_method %>% 
+    to_snake_case() %>% 
+    abbreviate(minlength = 10) %>%
+    unname()
+  df <- as.data.frame(shp_estudo)
+  
+    mapa_temp <- lapply(ensemble_method, function(ens){
+      ggplot(st_as_sf(df)) +
+        geom_sf(aes(fill = !!sym(ens)), color=NA) +
+        scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,1))})
+
+  if(returnRasters==T){
+    st_rasters <- sapply(nome_metodos, function(algo){st_rasterize(shp_estudo %>% dplyr::select(algo, geometry))}, simplify=F, USE.NAMES=TRUE)
+    return (st_rasters)
+  } else {
+    return(mapa_temp)
+  }
+}
 
 mapaDistrModelos <- function(df_distr, grid_estudo, nome_modelos){
-  return (mapaDistrMetodos(df_distr, grid_estudo, nome_modelos))
+  return (distribution_map_algo(df_distr, grid_estudo, nome_modelos))
 }
 
 matriz_confusao <- function(obs, pre) {
@@ -522,4 +476,119 @@ fortify_join <- function(shp){
   return(shp_temp)
 }
 
+
+### Funções luizfesser:
+
+WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030', gcm = 'mi', ssp = '126', resolution = 10){
+  
+  res = ifelse(resolution==30,'s','m')
+  
+  if(period=='current'){
+      if(!dir.exists('input_data/WorldClim_data_current')){ dir.create('input_data/WorldClim_data_current') }
+      if(length(list.files("input_data/WorldClim_data_current",pattern='.tif$', full.names=T))==0){
+        print(paste0('current_',resolution,res))
+        download.file(url = paste0('https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_',
+                                   resolution,
+                                   res,'_bio.zip'),
+                      destfile = paste0('input_data/current_', resolution, res,'.zip'),
+                      method = 'auto')
+        unzip(zipfile = paste0('input_data/current_', resolution, res,'.zip'),
+              exdir = paste0('input_data/WorldClim_data_current'))        
+      } else {
+        print(paste0('The file for current scenario is already downloaded.'))
+      }
+   }
+  
+  if(period=='future'){
+    if(!dir.exists('input_data/WorldClim_data_future')){ dir.create('input_data/WorldClim_data_future') }
+    all_gcm <- c('ac', 'bc', 'ca', 'cc', 'ce','cn', 'ch', 'cr', 'ec','ev', 'fi',
+                 'gf', 'gg','gh', 'hg', 'in', 'ic', 'ip', 'me', 'mi', 'mp','ml',
+                 'mr', 'uk')
+    gcm2 <- c('ACCESS-ESM1-5','BCC-CSM2-MR','CanESM5','CanESM5-CanOE','CMCC-ESM2',
+              'CNRM-CM6-1','CNRM-CM6-1-HR','CNRM-ESM2-1','EC-Earth3-Veg',
+              'EC-Earth3-Veg-LR','FIO-ESM-2-0','GFDL-ESM4','GISS-E2-1-G',
+              'GISS-E2-1-H','HadGEM3-GC31-LL','INM-CM4-8','INM-CM5-0',
+              'IPSL-CM6A-LR','MIROC-ES2L','MIROC6','MPI-ESM1-2-HR',
+              'MPI-ESM1-2-LR','MRI-ESM2-0','UKESM1-0-LL')
+    gcm3 <- gcm2[match(gcm,all_gcm)]
+    all_year <- c('2030', '2050', '2070', '2090')
+    year2 <- c('2021-2040', '2041-2060', '2061-2080', '2081-2100')
+    year3 <- year2[match(year,all_year)]
+    for (g in 1:length(gcm)) {
+      for (s in 1:length(ssp)) {
+        for (y in 1:length(year)) {
+          if(!file.exists(paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],'_', resolution, '_', year[y],'.tif'))){
+            print(paste0(gcm[g], '_ssp', ssp[s], '_', resolution, '_', year[y]))
+            download.file(url = paste0('https://geodata.ucdavis.edu/cmip6/',resolution,
+                                       res,'/',gcm3[g],'/ssp',ssp[s],'/wc2.1_',resolution,
+                                       res,'_',variable,'_',gcm3[g],'_ssp',ssp[s],'_',
+                                       year3[y],'.tif'),
+                          destfile = paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],
+                                            '_', resolution, '_', year[y],'.tif'),
+                          method = 'auto')
+          } else {
+            print(paste0('The file for future scenario (',
+                         paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],'_', resolution,res, '_', year[y],'.tif'),
+                         ') is already downloaded.'))
+          }
+        }
+      }
+    }
+  }
+}
+
+
+GBIF_data <- function(s, file='input_data/spp_data.csv'){
+  if(!file_exists(file)){
+    ids <- lapply(s, function(x) { name_suggest(q=x, rank = "species")$data$key[1]})
+    ids <- unlist(ids)
+    data <- lapply(ids, function(x) { y <- occ_data(taxonKey=x)
+    if('decimalLatitude' %in% names(y$data)){
+      y <- y$data[,c("species", "decimalLongitude","decimalLatitude")]
+      return(y)
+    }
+    } )
+    data <- bind_rows(data)
+    data <- data.frame(data)
+    data <- na.omit(data)
+    data$species <- rep(gsub(' ', '_', s),nrow(data))
+    write.csv(data, file, row.names=FALSE)
+  } else {
+    print(paste0('File already exists. Importing from: ',file))
+    data <- read.csv(file)
+  }
+  return(data)
+}
+
+
+data.clean <- function(x, r=NULL){
+  x <- subset( x, !is.na("decimalLongitude") | !is.na("decimalLatitude"))
+  x <- cc_cap( x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
+  x <- cc_cen( x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
+  x <- cc_dupl(x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
+  x <- cc_equ( x, lon = "decimalLongitude", lat = "decimalLatitude")
+  x <- cc_inst(x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
+  x <- cc_val( x, lon = "decimalLongitude", lat = "decimalLatitude")
+  x <- cc_sea( x, lon = "decimalLongitude", lat = "decimalLatitude")
+  if(!is.null(r)){
+    print('Raster identified, procceding with rasterized filter.')
+    r <- raster(r)
+    values(r) <- 1:ncell(r)
+    x2 <- x
+    coordinates(x2) <- 2:3
+    cell_id <- extract(r, x2)
+    x <- cbind(x, cell_id)
+    x <- x[!duplicated(x[,c(1,4)]),-4]
+  }
+  return(x)
+}
+
+
+w_area <- function(x){
+  cell_size <- area(x, na.rm=TRUE, weights=FALSE)
+  x <- cell_size*x
+  result <- cellStats(x, sum)
+  print(paste0(result," km2"))
+  return(as.numeric(result))
+}
 

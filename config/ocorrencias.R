@@ -1,32 +1,51 @@
+
+
+#o_file = arquivo_ocorrencias_especie
+#sp_names = nomes_especies
+#shp = shape_grid_estudo
+#proj = CRS(projecao_dados_ocorrencia)
+#spp_data
+#spp_names, grid_study_area, CRS(crs_occ_data))
+
 occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
-  sp_names <- sp_names %>% 
-    to_snake_case() %>% 
-    abbreviate(minlength = 10)
+  if(!is.null(sp_names)){
+    sp_names <- sp_names %>% 
+      to_snake_case() %>% 
+      abbreviate(minlength = 10)
+  }
   
   suppressMessages(
     sp_occurrences <- o_file %>%
       vroom() %>%
       clean_names() %>%
       remove_empty(c("rows", "cols")) %>%
-      mutate(especie=especie %>% to_snake_case() %>% abbreviate(minlength = 10)) 
+      mutate(species=species %>% to_snake_case() %>% abbreviate(minlength = 10))
   )
-  if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0)
+  
+  if(is.null(sp_names)){
+    sp_names <- unique(sp_occurrences$species)
+  }
+  
+  if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0){
     sp_occurrences <-  sp_occurrences %>%
-      filter(especie  %in% sp_names)
-  
-  if (is.character(shp))
+      filter(species %in% sp_names)
+  }
+
+  if (is.character(shp)){
     shp <- shp %>% 
-      readOGR(verbose = F)
-  
-  sp_occurrences$longitude <- sp_occurrences$longitude %>% 
+      st_read(verbose = F)
+  }
+
+  sp_occurrences$decimal_longitude <- sp_occurrences$decimal_longitude %>% 
     as.character() %>% 
     as.numeric()
   
-  sp_occurrences$latitude <- sp_occurrences$latitude %>% 
+  sp_occurrences$decimal_latitude <- sp_occurrences$decimal_latitude %>% 
     as.character() %>% 
     as.numeric()
   
-  coordinates(sp_occurrences) <- ~longitude+latitude
+  coordinates(sp_occurrences) <- ~decimal_longitude+decimal_latitude
+  
   if (is.character(proj)){
     crs(sp_occurrences) <- CRS(proj)
   } else {
@@ -35,13 +54,23 @@ occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
   
   sp_occurrences %>% 
     spTransform(crs(shp)) %>%
+    st_as_sf() %>%
     return()
 }
+
+
+
+#shp_occ=shape_ocorrencias
+#shp_area=shape_grid_estudo
+#sp_names=nomes_especies
 
 occurrences_to_pa_shapefile <- function(shp_occ, shp_area, sp_names){
   sp_names <- sp_names %>% 
     to_snake_case() %>% 
     abbreviate(minlength = 10)
+  
+  shp_area <- as(shp_area, "Spatial")
+  shp_occ <- as(shp_occ, "Spatial")
   
   pa_matrix <- shp_area@data[,F]
   
@@ -49,7 +78,7 @@ occurrences_to_pa_shapefile <- function(shp_occ, shp_area, sp_names){
     pa_matrix <- pa_matrix %>% 
       bind_cols(
         shp_area %>%
-          over(shp_occ[shp_occ@data$especie==spp, ])
+          over(shp_occ[shp_occ@data$species==spp, ])
       )
   }
   names(pa_matrix) <- sp_names
@@ -62,10 +91,14 @@ occurrences_to_pa_shapefile <- function(shp_occ, shp_area, sp_names){
   
   rownames(pa_matrix) <- rownames(shp_area@data)
   
-  grid_pa_matrix <- shp_area 
-  grid_pa_matrix@data <-  pa_matrix
+  #grid_pa_matrix <- shp_area 
+  #grid_pa_matrix@data <-  pa_matrix
   
-  return(grid_pa_matrix)
+  grid_pa_matrix <- cbind(shp_area, pa_matrix)
+  
+  grid_pa_matrix %>%
+    st_as_sf()%>%
+    return()
 }
 
 map_of_occurrences <- function(shp_occ, shp_area, title="", crs_subtitle=T){
@@ -97,7 +130,7 @@ map_of_occurrences <- function(shp_occ, shp_area, title="", crs_subtitle=T){
     geom_polygon(colour = "black", fill=NA)
   
   map_tmp <- map_tmp + 
-    geom_point(data = fortify(shp_occ), aes(x = long, y = lat, group=especie, color=especie)) 
+    geom_point(data = fortify(shp_occ), aes(x = long, y = lat, group=species, color=species)) 
 
   return(map_tmp)  
 }
