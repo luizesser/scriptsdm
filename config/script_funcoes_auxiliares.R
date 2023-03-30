@@ -102,6 +102,14 @@ if (interactive()){
 # para outras execuções, é necessário fazer um consenso para cada um dos algoritmos em cada célula. O consenso é a média dos 
 # valores da célula para cada um dos algoritmos. Assim, o resultado é uma matriz M x N, onde M são as células da grid e N são os 
 # consensos (médias para aquele algoritmo). O valor de cada célula será um valor entre 0 e 1. 
+
+#df_p = scenarios_list %>% 
+#  pluck(scenario_name)
+#m_treinados = t_models %>% pluck(sp)
+#algoritmo_predicao = pred_methods
+#tipo_thresh=2
+#lista_thresh=NULL
+
 DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, lista_thresh=NULL){
   if (is.null(lista_thresh)){
     lista_thresh <- getEvaluation(m_treinados, stat=c('threshold'), wtest="dep.test", opt=tipo_thresh)
@@ -146,6 +154,19 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
 }
 
 # ------------------------------------------------------------------------------------------------------------------------
+ensemble_map <- function(df_pred, shp_estudo){
+  shp_estudo <- cbind(shp_estudo, df_pred)
+  df <- as.data.frame(shp_estudo)
+  df$df_pred <- as.numeric(df$df_pred)
+  
+  mapa_temp <- ggplot(st_as_sf(df)) +
+      geom_sf(aes(fill = df_pred), color=NA) +
+      scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,max(df$df_pred))) +
+      ggtitle(paste0('Ensemble'))
+
+  return(mapa_temp)
+}
+
 distribution_map <- function(df_pred, shp_estudo, returnRasters=F){
   shp_estudo <- cbind(shp_estudo, df_pred)
   df <- as.data.frame(shp_estudo)
@@ -154,11 +175,13 @@ distribution_map <- function(df_pred, shp_estudo, returnRasters=F){
     df$consensus <- as.factor(df$consensus)
     mapa_temp <- ggplot(st_as_sf(df)) +
       geom_sf(aes(fill = consensus), color=NA) +
-      scale_fill_brewer(palette = "Set1")
+      scale_fill_brewer(palette = "Set1")+
+      ggtitle(unique(df_pred$species))
   } else {
     mapa_temp <- ggplot(st_as_sf(df)) +
       geom_sf(aes(fill = consensus), color=NA) +
-      scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,1))
+      scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,1)) +
+      ggtitle(unique(df_pred$species))
   }
   if(returnRasters==T){
     st_rasters <- st_rasterize(shp_estudo %>% dplyr::select("consensus", geometry))
@@ -478,6 +501,23 @@ fortify_join <- function(shp){
 
 
 ### Funções luizfesser:
+
+predictions_means <- function(predictions_sp, scenarios){
+  sp_names <- names(predictions_sp)
+  l <- unlist(predictions_sp, recursive = F)
+  result <- l[[1]]
+  df <- l %>% as.data.frame()
+  scenarios2 <- c('current',sort(scenarios))
+  for(s in scenarios2){
+    result <- cbind(result, rowMeans(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
+    result <- cbind(result, rowMeans(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+    result <- cbind(result, rowSums(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+  }
+  result <- result[,-c(1:ncol(l[[1]]))]
+  names(result) <- sort(c(paste0(scenarios2, '_pa_mean'), paste0(scenarios2, '_pa_sums'), paste0(scenarios2, '_freq_mean')))
+  return(result)
+}
+
 
 WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030', gcm = 'mi', ssp = '126', resolution = 10){
   

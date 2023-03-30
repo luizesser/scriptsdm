@@ -44,6 +44,7 @@
 # 14. cos2_dims
 # 15. pca_bi_plot
 # 16. comp_pca_retain
+# 17. get_df_vif
 
 #### Treinamento Avaliação
 # 1. tsne_plot

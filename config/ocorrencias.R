@@ -1,11 +1,10 @@
 
 
-#o_file = arquivo_ocorrencias_especie
-#sp_names = nomes_especies
-#shp = shape_grid_estudo
-#proj = CRS(projecao_dados_ocorrencia)
-#spp_data
-#spp_names, grid_study_area, CRS(crs_occ_data))
+#o_file = spp_data
+#sp_names = spp_names
+#shp = grid_study_area
+#proj = CRS(crs_occ_data)
+#
 
 occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
   if(!is.null(sp_names)){
@@ -23,13 +22,13 @@ occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
   )
   
   if(is.null(sp_names)){
-    sp_names <- unique(sp_occurrences$species)
+    sp_names <- sp_occurrences$species %>% unique()
   }
   
-  if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0){
-    sp_occurrences <-  sp_occurrences %>%
-      filter(species %in% sp_names)
-  }
+  #if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0){
+  #  sp_occurrences <-  sp_occurrences %>%
+  #    filter(species %in% sp_names)
+  #}x
 
   if (is.character(shp)){
     shp <- shp %>% 

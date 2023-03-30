@@ -264,17 +264,25 @@ comp_pca_retain <- function(factoMinerObject){
 }
 
 
-get_df_vif <- function(var, pa,var_names=NULL){
+get_df_vif <- function(var, pa, var_names=NULL, sp_names=NULL){
   if(is.null(var_names)){
     var_names <- colnames(var)
     var_names <- var_names[!var_names %in% c('cell_id',"x_centroid", "y_centroid", "geometry" )]
     cat('var_names not informed. Variables detected: ',paste(var_names, collapse=', '))
   }
+  
+  if(is.null(sp_names)){
+    sp_names <- colnames(pa)[-ncol(pa)]
+    cat('sp_names not informed. Detected species: ',paste(sp_names, collapse=', '))
+  }
+  
   df_vif <- cbind(as.data.frame(var) %>% select(all_of(var_names)), 
                   as.data.frame(pa) %>% select(!'geometry'))
-  df_vif %<>% filter(.,!!sym(colnames(pa)[-ncol(pa)])== 1)
-  df_vif[,1:length(var_names)] %>%
-    return()
+  l <- lapply(sp_names, function(x){df <- filter(df_vif,!!sym(x)== 1)
+                                    sp2 <- sp_names[sp_names != x]
+                                    df <- df[, !colnames(df) %in% sp2]})
+  names(l) <- sp_names
+  return(l)
 }
 
 

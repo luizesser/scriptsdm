@@ -85,11 +85,11 @@ train_models_to_folder <- function(df_pa, fitted_data, pred_methods, n_exec, n_f
   for (sp in colnames(df_pa)){
     output_folder_tmp <- output_folder %>%
       path(sp)
-    if (!dir_exists(output_folder_tmp)){
+    if (!folder_models %>% path(paste0(sp, ".sdm")) %>% file_exists()){
       dir_create(output_folder_tmp)
     
       suppressWarnings(
-        a_model <-
+        m <-
           sdm(
             data = fitted_data[[sp]],
             methods = pred_methods,
@@ -98,7 +98,20 @@ train_models_to_folder <- function(df_pa, fitted_data, pred_methods, n_exec, n_f
             replication = "cv"
           )
       )
-      a_model %>% 
+
+      #setting outputs
+      eval <- getEvaluation(m, wtest = "indep.test",stat = c("AUC", "TSS"), opt="max(se+sp)") # get evaluation for models
+      varimp <- getVarImp(m) 
+      varimp <- varimp@varImportanceMean # get variables importance
+      varimp_auc <- varimp$AUCtest
+      varimp_correlation <- varimp$corTest
+
+      #### Save Some Outputs ####
+      if(nrow(eval) >= 1) write.csv(eval, paste0(output_folder_tmp,"/",sp,"_EvalMetrics.csv"))
+      if(nrow(varimp_auc) >= 1) write.csv(varimp_auc, paste0(output_folder_tmp,"/",sp,"_VariableImportanceAUC.csv"))
+      if(nrow(varimp_correlation) >= 1) write.csv(varimp_correlation, paste0(output_folder_tmp,"/",sp,"_VariableImportanceCorrelation.csv"))
+
+      m %>% 
         saveRDS(output_folder_tmp %>% path(paste0(sp, ".sdm")))
     }
   }
@@ -118,13 +131,14 @@ sp_thresh <- function(t_models, thr_criteria){
 }
 
 sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
-  if (length(sp_name)>1) {
-    sp_name <- sp_name[1]
+  ths <- list()
+  for (sp in sp_name) {
+    ths[[sp]] <- sp %>%
+        sp_model_from_folder(folder) %>%
+        sp_thresh(thr_criteria) %>%
+        mutate(species_name=sp)
   }
-  sp_name %>%
-    sp_model_from_folder(folder) %>%
-    sp_thresh(thr_criteria) %>%
-    mutate(species_name=sp_name)
+  return(ths)
 }
 
 thresh_mean <- function(t_models, df_thr){ #, pred_methods){
@@ -140,20 +154,23 @@ thresh_mean <- function(t_models, df_thr){ #, pred_methods){
 }
 
 sp_thresh_mean_from_folder <- function(sp_name, folder, df_thr){
-  if (length(sp_name)>1) {
-    sp_name <- sp_name[1]
+  thr_mean <- list()
+  for(sp in sp_name){
+    thr_mean[[sp]] <- sp %>%
+        sp_model_from_folder(folder) %>%
+        unlist() %>%
+        thresh_mean(df_thr[[sp]])
   }
-  sp_name %>%
-    sp_model_from_folder(folder) %>%
-    thresh_mean(df_thr)
+  return(thr_mean)
 } 
 
 sp_model_from_folder <- function(sp_name, folder){
-  sp_name <- sp_name %>% 
-    to_snake_case() %>% 
-    abbreviate(minlength = 10) %>% 
-    unname()
-
+  if(nchar(sp_name)>10){
+    sp_name <- sp_name %>% 
+      to_snake_case() %>% 
+      abbreviate(minlength = 10) %>% 
+      unname()
+  }
   folder %>% 
     #dir_ls(glob = paste0("*", sp_name, "*.sdm"), recurse = T) %>%
     dir_ls(glob = paste0("*", sp_name, ".sdm"), recurse = T) %>%
@@ -178,13 +195,8 @@ sp_predictions_from_folder <- function(sp_name, folder){
 }
 
 predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr_criteria, output_folder){
-    if (dir_exists(output_folder))
-    dir_delete(output_folder)
-  
-  dir_create(output_folder)
-  
   for (sp in colnames(df_pa)){
-    df_pred_freq <- df_var %>% 
+    df_pred_freq <- df_var$current %>% 
       DRE_predict(t_models[[sp]], pred_methods, thr_criteria)
     # <- DRE_predict(modelos_treinados, df_predicao_var, alg_predicao, criterio_thres, thresholds_modelos_mcc)
     
@@ -232,16 +244,18 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
 
 
 
-#df_pa = df_pres_aus
+#df_pa = df_pa
 #scenarios_list =   projection_data
-#models_folder =   pasta_modelos_treinados
-#shp_grid =   shape_grid_estudo
-#pred_methods =   alg_predicao
-#thr_criteria =   criterio_thres
-#output_folder =   pasta_distribuicao_presente
+#models_folder =   folder_models
+#shp_grid =   grid_study_area
+#pred_methods =   algo
+#thr_criteria =   thresh_criteria
+#output_folder =   directory_projections
+#
+#thresholds_models_means
+#sp = colnames(df_pa)[1]
 
-
-predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pred_methods, thr_criteria, output_folder){
+predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pred_methods, thr_criteria, output_folder, thresholds_models_means){
   if ('geometry' %in% colnames(df_pa)){
     spp_names <- colnames(df_pa)[-grep("geometry", colnames(df_pa))]
   } else {
@@ -257,8 +271,11 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
         set_names("scenarios")
     }
     
+    names(thresholds_models_means) <- lapply(thresholds_models_means, function(x){unique(x$species)})
+    th <- thresholds_models_means[[sp]] %>% arrange(method)
+    th <- th$mean
     for (scenario_name in names(scenarios_list)){
-      folder_tmp <- output_folder %>% path("predicao_sp") %>% path(sp) %>% path(scenario_name)
+      folder_tmp <- output_folder %>% path(sp) %>% path(scenario_name)
       file_tmp <- scenario_name
       
       if (!dir_exists(folder_tmp)){
@@ -289,17 +306,12 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
         
         # Consenso usando presenca/ausencia
         df_pred_pres_aus <- df_pred_freq %>%
-          select(-consensus) %>%
-          mutate_all(~ ifelse(. <= 0.5, 0, 1)) %>% # mudar de 0.5 para o threshold de df (como? calcular threshold pra projeção?).
+          select(-c(consensus, wmean_AUC, wmean_TSS)) %>% 
+          select(sort(names(.))) %>%
+          mutate_all(funs(ifelse(. > th, 1, 0))) %>% 
           mutate(consensus = rowMeans(.) %>% round(., digits = 0))
         
         # Ensembles:
-        df_pred_pres_aus <- df_pred_freq %>%
-          select(-consensus) %>%
-          mutate_all(~ ifelse(. <= 0.5, 0, 1)) %>%
-          mutate(consensus = rowMeans(.) %>% round(., digits = 0))
-      
-        
         df_pred_freq <- rep(sp, nrow(df_pred_freq)) %>% 
           as.data.frame() %>% 
           rename("species"=".") %>%
@@ -334,11 +346,11 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
             )
         )
         
-        colnames(df_pred_pres_aus) <- df_pred_freq %>% 
-          colnames() %>%
-          to_snake_case() %>%
-          abbreviate(minlength = 10) %>%
-          unname()
+        #colnames(df_pred_pres_aus) <- df_pred_freq %>% 
+        #  colnames() %>%
+        #  to_snake_case() %>%
+        #  abbreviate(minlength = 10) %>%
+        #  unname()
         
         suppressMessages(
           df_pred_pres_aus %>%
@@ -354,19 +366,22 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
   }
 }
 
-
 model_failures <- function(fitted_data, models_folder){
-  fitted_data %>% 
-    names() %>% 
-    map_dfr(~ 
-              sp_model_from_folder(., models_folder) %>%
-              pluck(1) %>%
-              slot("run.info") %>% 
-              select(species, method, success) %>%
-              filter(success == F) %>%
-              unique()
-    )
+  fails <- list()
+  for(i in length(names(fitted_data))){
+      m <- sp_model_from_folder(names(fitted_data[[1]]), models_folder) %>%
+                pluck(1) %>%
+                slot("run.info") %>% 
+                select(species, method, success) %>%
+                filter(success == F) %>%
+                unique() %>%
+                nrow()
+      fails[[i]] <- m
+  }
+  return(m)
 }
+
+
 
 # TODO: Esse método precisa ser refatorado: quebrado em diversos outros métodos. Também precisa ser melhorado com novas funções.
 #gerarPseudoAusenciasDRE <- function (shp_pa, df_var, especies, metodo="random", cluster_m="k-means"){
@@ -581,7 +596,7 @@ model_failures <- function(fitted_data, models_folder){
 #  }
 #}
 
-pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m="k-means"){
+pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m="k-means", n_pa=1, output_folder=here("output_data/models")){
   especies <- especies %>% 
     to_snake_case() %>% 
     abbreviate(minlength = 10) %>%
@@ -631,7 +646,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m
     return(grupos)
   }
   
-  if (metodo == "cluster") {
+  if (method == "cluster") {
     backgrounds = list()
     for (sp in colnames(df_pa)){
       df_p <- df_pa %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
@@ -694,7 +709,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m
     #   coord_equal()
     
   }
-  if (metodo == "dre_area" || metodo == "dre_dens"){
+  if (method == "dre_area" || method == "dre_dens"){
     quant_max <- 0
     num_grupo_quant_max <- 2
     dens_acum <- 0
@@ -724,7 +739,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m
         }
       }
       
-      if (metodo=="dre_area"){
+      if (method=="dre_area"){
         numero_grupos <- num_grupo_quant_max  
       } else {
         numero_grupos <- num_grupo_dens_acum
@@ -733,7 +748,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m
       df_var <- df_var %>% .add_grupos(df_p, nro_grupos=numero_grupos) # k = 1 do numero de pres.
       grupos <- df_var %>% .get_summary_from(df_pa[[sp]])
       
-      if (metodo=="dre_area"){
+      if (method=="dre_area"){
         grupos <- grupos %>%
           filter(dens_presenca <=mean(grupos$dens_presenca))
       }
@@ -778,20 +793,33 @@ pseudoabsences <- function (shp_pa, df_var, especies, metodo="random", cluster_m
     }
     return(backgrounds)
   } 
-  if (metodo == "random") {
+  if (method == "random") {
+    
     backgrounds = list()
+    
     for (sp in especies){
-      
-      n_pa <- df_pa[[sp]] %>% sum()
-      
-      df_bg <- df_var %>%
-        bind_cols(especie=df_pa[[sp]]) %>%
-        filter(especie==0) %>%
-        sample_n(n_pa) %>%
-        select(-especie)
-      
-      backgrounds <- backgrounds %>% 
-        append(list(df_bg) %>% set_names(sp))
+      output_folder_tmp <- output_folder %>%
+        path(sp)
+      if (!file_exists(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
+        dir_create(output_folder_tmp)
+        
+        n_pa2 <- df_pa[[sp]] %>% sum()
+        
+        df_bg <- df_var %>%
+          bind_cols(especie=df_pa[[sp]]) %>%
+          filter(especie==0) %>%
+          sample_n(n_pa2) %>%
+          select(-especie)
+        
+        backgrounds <- backgrounds %>% 
+          append(list(df_bg) %>% set_names(sp))
+        
+        #backgrounds[[sp]] <- df_bg
+        
+        write.csv(df_bg, paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
+      } else {
+        backgrounds[[sp]] <- read.csv(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))
+      }
     }
     return(backgrounds)
   }
