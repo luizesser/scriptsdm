@@ -65,7 +65,7 @@ center_scale <- function(df, var_names){
 
 corr_plot <- function(df){
   my_ggcorrplot(
-    df %>% cor() %>% round(2),
+    df %>% na.omit() %>% cor() %>% round(2),
     method = "circle",
     type = "upper",
     tl.col = "black",
@@ -279,8 +279,7 @@ get_df_vif <- function(var, pa, var_names=NULL, sp_names=NULL){
   df_vif <- cbind(as.data.frame(var) %>% select(all_of(var_names)), 
                   as.data.frame(pa) %>% select(!'geometry'))
   l <- lapply(sp_names, function(x){df <- filter(df_vif,!!sym(x)== 1)
-                                    sp2 <- sp_names[sp_names != x]
-                                    df <- df[, !colnames(df) %in% sp2]})
+                                    df <- df %>% select(!all_of(sp_names))})
   names(l) <- sp_names
   return(l)
 }

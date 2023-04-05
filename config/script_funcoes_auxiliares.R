@@ -41,6 +41,7 @@ library(rdist)                               # distancia euclideana
 library(usdm)                                # vif
 #library(clusternor)                          # xmeans clustering
 library(ade4)                                # Enfa
+library(boot)                                # Inverse Logit Function for glmnet
 
 # Miscelânea
 library(tidyverse)                           # funções de manipulação de dataframes e  listas
@@ -578,25 +579,20 @@ WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030',
 }
 
 
-GBIF_data <- function(s, file='input_data/spp_data.csv', limit = 100000){
+GBIF_data <- function(s, file='input_data/spp_data.csv'){
   if(!file_exists(file)){
     ids <- lapply(s, function(x) { name_suggest(q=x, rank = "species")$data$key[1]})
     ids <- unlist(ids)
-    data <- lapply(ids, function(x) { y <- occ_data(taxonKey=x, limit = limit)
-    if(nrow(y$data)>0){
-      if('decimalLatitude' %in% names(y$data)){
-        y <- y$data[,c("species", "decimalLongitude","decimalLatitude")]
-      } else {
-        y <- data.frame(species=NA, decimalLongitude=NA,decimalLatitude=NA)
-      }
+    data <- lapply(ids, function(x) { y <- occ_data(taxonKey=x)
+    if('decimalLatitude' %in% names(y$data)){
+      y <- y$data[,c("species", "decimalLongitude","decimalLatitude")]
       return(y)
     }
-    }
-    )
+    } )
     data <- bind_rows(data)
     data <- data.frame(data)
     data <- na.omit(data)
-    data$species <- gsub(' ', '_', data$species)
+    data$species <- rep(gsub(' ', '_', s),nrow(data))
     write.csv(data, file, row.names=FALSE)
   } else {
     print(paste0('File already exists. Importing from: ',file))

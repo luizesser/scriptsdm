@@ -130,13 +130,31 @@ sp_thresh <- function(t_models, thr_criteria){
     )
 }
 
+#folder = folder_models
+#thr_criteria = thresh_criteria
 sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
   ths <- list()
   for (sp in sp_name) {
-    ths[[sp]] <- sp %>%
+    m <- sp %>%
+      sp_model_from_folder(folder)
+    if('glmnet' %in% m[[sp]]@setting@methods){
+      m <- sp %>%
+        sp_model_from_folder(folder)
+      ids <- m[[sp]] %>% getModelInfo()
+      ids <- ids$modelID[ids$method=='glmnet']
+      df <- sp %>%
         sp_model_from_folder(folder) %>%
+        sp_thresh(thr_criteria)
+      if(any(df[ids,'threshold']<0)){
+        df[ids,'threshold'] <- boot::inv.logit(df[ids,'threshold'])
+      }
+      ths[[sp]] <- df %>%
+        mutate(species_name=sp)
+    } else {
+      ths[[sp]] <- m[[sp]] %>%
         sp_thresh(thr_criteria) %>%
         mutate(species_name=sp)
+    }
   }
   return(ths)
 }
@@ -253,7 +271,8 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
 #output_folder =   directory_projections
 #
 #thresholds_models_means
-#sp = colnames(df_pa)[1]
+#sp = colnames(df_pa)[8]
+#scenario_name = names(scenarios_list)[2]
 
 predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pred_methods, thr_criteria, output_folder, thresholds_models_means){
   if ('geometry' %in% colnames(df_pa)){
@@ -289,14 +308,15 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pr
         consensus <- df_pred_freq %>% rowMeans()
         
         # Weighted mean (AUC)
-        df <- cbind(algo=getModelInfo(t_models[[sp]])$method,
+        ids <- getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria)$modelID
+        df <- cbind(algo=getModelInfo(t_models[[sp]])$method[ids],
                     getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria))
         w <- aggregate(df$AUC, by=list(df$algo), FUN=mean)$x
-        wmean_AUC <- apply(df_pred_freq, 1, function(x) sum(x * w))
+        wmean_AUC <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
         
         # Weighted mean (TSS)
         w <- aggregate(df$TSS, by=list(df$algo), FUN=mean)$x
-        wmean_TSS <- apply(df_pred_freq, 1, function(x) sum(x * w))
+        wmean_TSS <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
        
         
         # include ensembles in data.frame
