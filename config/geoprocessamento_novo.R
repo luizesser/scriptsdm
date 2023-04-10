@@ -11,7 +11,7 @@ repair_shp <- function(shp) {
   #if (sf::st_is(x, c("POLYGON", "MULTIPOLYGON")))
   #if (!(sf::st_geometry(shp) %>% inherits(c("sfc_POLYGON","sfc")))){
   if (!(sf::st_geometry(shp) %>% class() %in% "sfc" %>% any())){
-    stop("Arquivo da área de estudo inválido!")
+    stop("Invalid study area file!")
   }
   if (shp %>% sf::st_crs() %>% is.na()){
     shp <- shp %>% 
@@ -23,10 +23,10 @@ repair_shp <- function(shp) {
 
 drop_areas <- function(shp, inf_limit=0) {
   if (!(sf::st_geometry(shp) %>% class() %in% "sfc" %>% any())){
-    stop("Arquivo da área de estudo inválido!")
+    stop("Invalid study area file!")
   }
   if (inf_limit<=0){
-    stop("Limite de área de inválido!")
+    stop("Invalid area limit!")
   }
   
   if (shp %>% sf::st_is(c("POLYGON", "MULTIPOLYGON")) %>% all()) {
@@ -39,7 +39,7 @@ drop_areas <- function(shp, inf_limit=0) {
   return(shp)      
 }
 
-make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid=T){
+make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid=T, epsg=NULL){
   sfc_as_cols <- function(x, geometry, names = c("x","y")) {
     if (missing(geometry)) {
       geometry <- sf::st_geometry(x)
@@ -56,10 +56,10 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
   }
   
   if (!(sf::st_geometry(shp) %>% class() %in% "sfc" %>% any())){
-    stop("Arquivo da área de estudo inválido!")
+    stop("Invalid study area file!")
   }
   if (cell_width<=0 || cell_height<=0){
-    stop("Tamanho de célula inválido!")
+    stop("Invalid cell size!")
   }
   shp <- shp %>%
     dplyr::rename_all(tolower)
@@ -67,6 +67,10 @@ make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid
   if (!is.null(var_names)){
     shp <- shp %>%
       dplyr::select(var_names %>% tolower() %>% all_of()) 
+  }
+  
+  if(!is.null(epsg)){
+    shp <- st_transform(shp, st_crs(paste0("+init=epsg:",epsg)))
   }
   
   bbox <- shp %>% 
@@ -174,12 +178,13 @@ area_map <- function(shp, title="", crs_subtitle=T, lat="decimalLatitude", long=
 }
 
 
-
 #shp = grid_study_area
 #raster_folder= folder_future_rasters
 #var_names= future_var_names
+#selected_gcms = gcms_result$suggested_gcms
+#scenario = 245
 
-add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
+add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL, selected_gcms=NULL){
   if (is.null(raster_folder)){
     stop("Invalid raster folder!")
   }
@@ -201,8 +206,12 @@ add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
       tryCatch(error = function(e) e)
     
   } else { # if scenario != NULL, we are using future data
-    l <- raster_folder %>% list.files(full.names = T)
-    raster_stack <- l[grep(scenario,l)] %>%
+    l <- raster_folder %>% list.files(full.names = T, rec=T)
+    l <- l[grep(scenario,l)]
+    if (!is.null(selected_gcms)){
+      l <- l[grep(paste(selected_gcms,collapse="|"),l)]
+    }
+    raster_stack <-  l %>%
       stack() %>%
       tryCatch(error = function(e) e)
   }
@@ -221,6 +230,10 @@ add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
     names(raster_stack) <- var_names
   }
   
+  if(!as.character(crs(raster_stack))==as.character(CRS(crs(shp)))){
+    raster_stack <- projectRaster(raster_stack, crs=CRS(crs(shp)))
+  }
+    
   # 2. Obter bbox do shape
   # 3. crop mask stack
   raster_stack <- raster_stack %>%

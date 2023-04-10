@@ -130,6 +130,7 @@ sp_thresh <- function(t_models, thr_criteria){
     )
 }
 
+#sp_name = spp_names
 #folder = folder_models
 #thr_criteria = thresh_criteria
 sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
