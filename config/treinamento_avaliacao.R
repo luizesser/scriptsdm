@@ -119,20 +119,22 @@ train_models_to_folder <- function(df_pa, fitted_data, pred_methods, n_exec, n_f
 
 sp_thresh <- function(t_models, thr_criteria){
   t_models %>% 
-    map_dfr(~ getEvaluation(
+    #map_dfr(~ 
+              getEvaluation(
       ., 
       stat=c(
         'threshold', 'AUC', 'COR', 'sensitivity', 'specificity', 'TSS', 'Kappa'
       ), 
       opt=thr_criteria
-    ), 
-    .id = "species"
     )
+    #, 
+    #.id = "species"
+    #)
 }
 
-#sp_name = spp_names
+#sp_name = spp_names[1]
 #folder = folder_models
-#thr_criteria = thresh_criteria
+#thr_criteria = 2
 sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
   ths <- list()
   for (sp in sp_name) {
@@ -150,11 +152,11 @@ sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
         df[ids,'threshold'] <- boot::inv.logit(df[ids,'threshold'])
       }
       ths[[sp]] <- df %>%
-        mutate(species_name=sp)
+        mutate(species=sp)
     } else {
       ths[[sp]] <- m[[sp]] %>%
         sp_thresh(thr_criteria) %>%
-        mutate(species_name=sp)
+        mutate(species=sp)
     }
   }
   return(ths)

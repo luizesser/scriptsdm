@@ -557,16 +557,16 @@ compare_gcms <- function(folder_future_rasters_gcms, grid_study_area, var_names=
                               labelsize = 10,
                               ggtheme = theme_minimal(),
                               main = "K-means Clustering Plot",
-                              xlim=c(-3,3),
-                              ylim=c(-3,3),
+                              xlim=c(-5,5),
+                              ylim=c(-5,5),
                               legend = 'none')
   
   # Run Hierarchical Cluster
   # hclust_plot <- hclust(dist_matrix)
   # Include elbow, silhouette and gap methods
   flatten_subset <- na.omit(flatten_vars)
-  flatten_subset <- flatten_subset[sample(nrow(flatten_subset), nrow(flatten_subset)/20),]
-  wss <- fviz_nbclust(flatten_subset, FUN = hcut, method = "wss")
+  flatten_subset <- flatten_subset[sample(nrow(flatten_subset), 1000),]
+  wss <- fviz_nbclust(flatten_subset, FUN = hcut, method = "wss", )
   sil <- fviz_nbclust(flatten_subset, FUN = hcut, method = "silhouette")
   #gap <- fviz_gap_stat(flatten_subset, maxSE = list(method = "globalmax"))
   
@@ -606,7 +606,7 @@ compare_gcms <- function(folder_future_rasters_gcms, grid_study_area, var_names=
   gcms <- apply(cl$centers, 1, function(x){which.min(x) %>% names()})
   
   
-  return(list(suggested_gcms=gcms,
+  return(list(suggested_gcms=as.vector(gcms),
               statistics_gcms=statistics_gcms))
 }
 
@@ -617,6 +617,7 @@ predictions_means <- function(predictions_sp, scenarios){
   l <- unlist(predictions_sp, recursive = F)
   result <- l[[1]]
   df <- l %>% as.data.frame()
+  scenarios <- gsub("-",".",scenarios)
   scenarios2 <- c('current',sort(scenarios))
   for(s in scenarios2){
     result <- cbind(result, rowMeans(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
@@ -688,7 +689,7 @@ WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030',
 }
 
 
-GBIF_data <- function(s, file='input_data/spp_data.csv'){
+GBIF_data <- function(s, file='input_data/spp_data.csv'){ # splink?
   if(!file_exists(file)){
     ids <- lapply(s, function(x) { name_suggest(q=x, rank = "species")$data$key[1]})
     ids <- unlist(ids)

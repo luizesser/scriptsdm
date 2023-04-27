@@ -181,10 +181,10 @@ area_map <- function(shp, title="", crs_subtitle=T, lat="decimalLatitude", long=
 #shp = grid_study_area
 #raster_folder= folder_future_rasters
 #var_names= future_var_names
-#selected_gcms = gcms_result$suggested_gcms
-#scenario = 245
+#selected_gcms = gcms_result$suggested_gcms[1]
+#scenario = 'ssp370'
 
-add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL, selected_gcms=NULL){
+add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
   if (is.null(raster_folder)){
     stop("Invalid raster folder!")
   }
@@ -208,9 +208,9 @@ add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL, s
   } else { # if scenario != NULL, we are using future data
     l <- raster_folder %>% list.files(full.names = T, rec=T)
     l <- l[grep(scenario,l)]
-    if (!is.null(selected_gcms)){
-      l <- l[grep(paste(selected_gcms,collapse="|"),l)]
-    }
+    #if (!is.null(selected_gcms)){
+    #  l <- l[grep(paste(selected_gcms,collapse="|"),l)]
+    #}
     raster_stack <-  l %>%
       stack() %>%
       tryCatch(error = function(e) e)
