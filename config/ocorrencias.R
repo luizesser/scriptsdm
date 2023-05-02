@@ -6,7 +6,7 @@
 #proj = CRS(crs_occ_data)
 #
 
-occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
+occurrences_to_shapefile <- function(o_file, sp_names, shp){
   if(!is.null(sp_names)){
     sp_names <- sp_names %>% 
       to_snake_case() %>% 
@@ -45,15 +45,12 @@ occurrences_to_shapefile <- function(o_file, sp_names, shp, proj){
   
   coordinates(sp_occurrences) <- ~decimal_longitude+decimal_latitude
   
-  if (is.character(proj)){
-    crs(sp_occurrences) <- CRS(proj)
-  } else {
-    crs(sp_occurrences) <- proj  
-  }
+
+  crs(sp_occurrences) <-  CRS("+init=epsg:4326")
   
-  sp_occurrences %>% 
-    spTransform(crs(shp)) %>%
+  sp_occurrences %>%  
     st_as_sf() %>%
+    st_transform(st_crs(shp)) %>%
     return()
 }
 

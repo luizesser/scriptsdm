@@ -42,8 +42,11 @@ fit_data <- function(df_pa, df_var, df_bg){
   if('cell_id' %in% colnames(df_var)){
     df_var %<>% select(-c('cell_id'))
   }
+  
   fitted_data <- list()
   for (sp in colnames(df_pa)){
+    df_var2 <- df_var %>% select(colnames(df_bg[[sp]]))
+    
     predict_data <- sdmData(
       sp %>% 
         paste0(collapse = " + ") %>% 
@@ -51,7 +54,7 @@ fit_data <- function(df_pa, df_var, df_bg){
         as.formula(), 
       train = df_pa %>% 
         select(all_of(sp)) %>% 
-        bind_cols(df_var) %>% 
+        bind_cols(df_var2) %>% 
         filter(.[sp]==1),
       bg = df_bg[[sp]] %>% 
         bind_cols(rep(0,nrow(df_bg[[sp]])) %>% list() %>% set_names(sp))
@@ -100,7 +103,7 @@ train_models_to_folder <- function(df_pa, fitted_data, pred_methods, n_exec, n_f
       )
 
       #setting outputs
-      eval <- getEvaluation(m, wtest = "indep.test",stat = c("AUC", "TSS"), opt="max(se+sp)") # get evaluation for models
+      eval <- getEvaluation(m, wtest = "indep.test",stat = c('threshold', 'AUC', 'COR', 'sensitivity', 'specificity', 'TSS', 'Kappa'), opt="max(se+sp)") # get evaluation for models
       varimp <- getVarImp(m) 
       varimp <- varimp@varImportanceMean # get variables importance
       varimp_auc <- varimp$AUCtest
@@ -120,21 +123,21 @@ train_models_to_folder <- function(df_pa, fitted_data, pred_methods, n_exec, n_f
 sp_thresh <- function(t_models, thr_criteria){
   t_models %>% 
     #map_dfr(~ 
-              getEvaluation(
+    getEvaluation(
       ., 
       stat=c(
         'threshold', 'AUC', 'COR', 'sensitivity', 'specificity', 'TSS', 'Kappa'
       ), 
       opt=thr_criteria
     )
-    #, 
-    #.id = "species"
-    #)
+  #, 
+  #.id = "species"
+  #)
 }
 
-#sp_name = spp_names[1]
+#sp_name = spp_names
 #folder = folder_models
-#thr_criteria = 2
+#thr_criteria = thresh_criteria
 sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
   ths <- list()
   for (sp in sp_name) {
@@ -838,10 +841,13 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
           append(list(df_bg) %>% set_names(sp))
         
         #backgrounds[[sp]] <- df_bg
+        if('geometry' %in% colnames(df_bg)){
+          df_bg <- df_bg %>% select(-'geometry')
+        }
         
         write.csv(df_bg, paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
       } else {
-        backgrounds[[sp]] <- read.csv(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))
+        backgrounds[[sp]] <- read.csv(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), sep=',')
       }
     }
     return(backgrounds)

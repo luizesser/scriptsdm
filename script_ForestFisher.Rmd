@@ -190,7 +190,7 @@ if (output_shp_study_area %>% file_exists()== F){
 ## Compare GCMs
 Comparing GCMs is important so we don't need to project all the GCMs. We propose here an alternative method that calculates a k-means given the number of groups you want. First we need to rescale future variables. To make GCMs comparable, we use only one SSP and one time-period. It is only supported, so far, to use bio_1 and bio_12 (both are used to infer other bioclimatic variables).
 
-```{r compare_gcms}
+```{r compare_gcms, eval=F}
 ### Setting inputs and outputs
 scenarios_gcm <- 585
 gcm_names <- gcms
@@ -281,7 +281,7 @@ It is also necessary to set some other important parameters.
 spp_names <- read.csv(spp_data)$species %>% table() %>% names()# or NULL
 
 # Set which CRS projection is the grid_study_area.
-crs_occ_data <- "+init=epsg:4326"
+#crs_occ_data <- "+init=epsg:4326"
 ```
 
 
@@ -289,9 +289,10 @@ crs_occ_data <- "+init=epsg:4326"
 
 ```{r importing occurrence data,  eval=T, include=T}
 occ_shp <- spp_data %>% 
-  occurrences_to_shapefile(spp_names, grid_study_area, CRS(crs_occ_data))
+  occurrences_to_shapefile(spp_names, grid_study_area)
 
-plot(occ_shp)
+mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 2, layer.name = "Study Area", legend=NULL) +
+  mapview(occ_shp, zcol = "species", layer.name = "Species") 
 ```
 
 
@@ -299,6 +300,11 @@ plot(occ_shp)
 We will say to the grid_study_area which cells have an occurrence record for the studied species.
 
 ```{r generating_shape_matrix_pa, eval=T, include=T}
+  spp_names_abv <- spp_names %>% 
+    to_snake_case() %>% 
+    abbreviate(minlength = 10) %>% 
+    as.vector()
+
 if (spp_output %>% file_exists() == F) {
   grid_matrix_pa <- occ_shp %>% 
     occurrences_to_pa_shapefile(grid_study_area, spp_names)
@@ -307,30 +313,26 @@ if (spp_output %>% file_exists() == F) {
     path_dir() %>% 
     dir_create()
   
-  grid_matrix_pa %<>% select(-c('x_centroid', 'y_centroid', 'cell_id'))
+  grid_matrix_pa %<>% select(c(spp_names_abv))
   
   grid_matrix_pa %>% st_write(dsn = spp_output)
 } else {
   grid_matrix_pa <- spp_output %>% st_read()
 }
 
-grid_matrix_pa %>%  # mapa por espécie
-  mutate(sum = rowSums(across(where(is.numeric)))) %>%
-  mutate(across(sum, as.factor)) %>%
-  ggplot() +
-      geom_sf(aes(fill = sum), color=NA) +
-      scale_fill_brewer(palette = "YlGnBu")   
-    
+grid_matrix_pa %>% 
+  as.data.frame() %>% 
+  select(all_of(spp_names_abv)) %>% 
+  rowSums() %>% 
+  as.vector() %>%
+  richness_map(., grid_study_area)
 ```
 
 
 Check how many records there is to each species:
 
 ```{r number of occupied cells, eval=T, include=T}
-sapply(colnames(grid_matrix_pa)[-ncol(grid_matrix_pa)], # fazer output
-       function(x){
-          sum(as.data.frame(grid_matrix_pa)[,x])},
-       USE.NAMES = T)
+presences_number(grid_matrix_pa, spp_names)
 ```
 
 
@@ -348,7 +350,9 @@ vif_bio <- lapply(df_vif, function(x){vifcor(x,th=0.5)})
 vif_bio[[1]]
 
 # We can exclude variables with high VIF or go to the next step.
-grid_current_vif <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
+#grid_current_vif <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
+
+### Criar lista de variaveis por especies
                         
 ```
 

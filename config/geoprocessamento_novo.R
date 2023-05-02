@@ -179,10 +179,11 @@ area_map <- function(shp, title="", crs_subtitle=T, lat="decimalLatitude", long=
 
 
 #shp = grid_study_area
-#raster_folder= folder_future_rasters
-#var_names= future_var_names
-#selected_gcms = gcms_result$suggested_gcms[1]
+#raster_folder= folder_current_rasters
+#var_names= raster_vars
 #scenario = 'ssp370'
+
+
 
 add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
   if (is.null(raster_folder)){
@@ -263,7 +264,15 @@ add_raster <- function(shp, raster_folder=NULL, var_names=NULL, scenario=NULL){
     cbind(v) %>%
     st_as_sf() 
   
-  names(shp_raster)[-c(1:3,length(names(shp_raster)))] <- names(raster_stack)
+  #n <- shp %>% length()
+  
+  names(shp_raster) <- c(names(shp)[-which(names(shp)=='geometry')], names(raster_stack), "geometry")
+  
+  # set classes:
+  cols <- !lapply(shp_raster, class) == 'numeric' & !names(shp_raster) %in% c('geometry', 'cell_id')
+    
+  shp_raster[,cols] <- shp_raster[,cols] %>% 
+    mutate(across(where(~ !is.numeric(.)), as.numeric))
   
   return(shp_raster)
 }

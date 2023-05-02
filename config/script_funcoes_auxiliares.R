@@ -155,6 +155,31 @@ DRE_predict <- function(df_p, m_treinados, algoritmo_predicao, tipo_thresh=2, li
 }
 
 # ------------------------------------------------------------------------------------------------------------------------
+presences_number <- function(grid_matrix_pa, spp_names){
+  spp_names_abv <- spp_names %>% 
+    to_snake_case() %>% 
+    abbreviate(minlength = 10) %>% 
+    as.vector()
+  x <- sapply(spp_names_abv, 
+              function(x){
+                sum(as.data.frame(grid_matrix_pa)[,x])},
+              USE.NAMES = T) %>% data.frame(Presences=.)
+  return(x)
+}
+
+richness_map <- function(df_pred, shp_estudo){
+  shp_estudo <- cbind(shp_estudo, df_pred)
+  df <- as.data.frame(shp_estudo)
+  df$df_pred <- as.numeric(df$df_pred)
+  
+  mapa_temp <- ggplot(st_as_sf(df)) +
+    geom_sf(aes(fill = df_pred), color=NA) +
+    scale_fill_continuous(type='viridis', limits=c(0,max(df$df_pred))) +
+    ggtitle(paste0('Richness'))
+  
+  return(mapa_temp)
+}
+
 ensemble_map <- function(df_pred, shp_estudo){
   shp_estudo <- cbind(shp_estudo, df_pred)
   df <- as.data.frame(shp_estudo)
@@ -557,16 +582,16 @@ compare_gcms <- function(folder_future_rasters_gcms, grid_study_area, var_names=
                               labelsize = 10,
                               ggtheme = theme_minimal(),
                               main = "K-means Clustering Plot",
-                              xlim=c(-5,5),
-                              ylim=c(-5,5),
+                              xlim=c(-3,3),
+                              ylim=c(-3,3),
                               legend = 'none')
   
   # Run Hierarchical Cluster
   # hclust_plot <- hclust(dist_matrix)
   # Include elbow, silhouette and gap methods
   flatten_subset <- na.omit(flatten_vars)
-  flatten_subset <- flatten_subset[sample(nrow(flatten_subset), 1000),]
-  wss <- fviz_nbclust(flatten_subset, FUN = hcut, method = "wss", )
+  flatten_subset <- flatten_subset[sample(nrow(flatten_subset), nrow(flatten_subset)/20),]
+  wss <- fviz_nbclust(flatten_subset, FUN = hcut, method = "wss")
   sil <- fviz_nbclust(flatten_subset, FUN = hcut, method = "silhouette")
   #gap <- fviz_gap_stat(flatten_subset, maxSE = list(method = "globalmax"))
   
@@ -689,7 +714,7 @@ WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030',
 }
 
 
-GBIF_data <- function(s, file='input_data/spp_data.csv'){ # splink?
+GBIF_data <- function(s, file='input_data/spp_data.csv'){
   if(!file_exists(file)){
     ids <- lapply(s, function(x) { name_suggest(q=x, rank = "species")$data$key[1]})
     ids <- unlist(ids)
