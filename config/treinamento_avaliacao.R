@@ -4,32 +4,34 @@ tsne_plot <- function(df, df_bg, sp_names){
     abbreviate(minlength = 10) %>%
     unname()
   
-  sp <- 1
-  df_pred <- df %>%
-    filter(.[sp]==1) %>% 
-    bind_rows(df_bg[[sp]]) %>%
-    replace(is.na(.), 0)
+  result <- lapply(sp_names, function(sp){
+    df_pred <- df %>%
+      filter(.[sp]==1) %>% 
+      bind_rows(df_bg[[sp]]) %>%
+      replace(is.na(.), 0) %>% 
+      select(sp,all_of(names(df_bg[[sp]])))
+    
+    # Empiricamente um bom valor de perplexity é: P ~ N^1/2
+    perp = round((nrow(df_pred) ^ (1/2)), digits=0)
+    df_bg_tsne <- df_pred[!duplicated(df_pred), ]
   
-  # Empiricamente um bom valor de perplexity é: P ~ N^1/2
-  perp = round((nrow(df_pred) ^ (1/2)), digits=0)
-  df_bg_tsne <- df_pred %>% 
-    select(c(sp_names[[sp]], colnames(df))) %>% 
-    unique()
-
-  tsne_bg <- Rtsne(as.matrix(df_bg_tsne), perplexity = perp)
-  
-  esp_colors <- df_pred %>% 
-    unique() %>% 
-    select(sp_names[[sp]]) %>% 
-    pull()
-  
-  qplot(
-    tsne_bg$Y[,1], 
-    tsne_bg$Y[,2],
-    main = sp_names[[sp]],
-    geom = "point", 
-    colour = esp_colors
-  )
+    tsne_bg <- Rtsne(as.matrix(df_bg_tsne), perplexity = perp)
+    
+    esp_colors <- df_pred %>% 
+      unique() %>% 
+      select(sp) %>% 
+      pull()
+    
+    tsne_result <- qplot(
+      tsne_bg$Y[,1], 
+      tsne_bg$Y[,2],
+      main = sp,
+      geom = "point", 
+      colour = esp_colors
+    )
+    return(tsne_result)
+  })
+  return(result)
 }
 
 fit_data <- function(df_pa, df_var, df_bg){
@@ -62,7 +64,8 @@ fit_data <- function(df_pa, df_var, df_bg){
     fitted_data <- fitted_data %>% 
       append(list(predict_data) %>% set_names(sp))
   }
-  return(fitted_data)
+  names(result) <- sp_names
+  return(result)
 }
 
 train_models <- function(df_pa, fitted_data, pred_methods, n_exec, n_folds){
@@ -165,17 +168,32 @@ sp_thresh_from_folder <- function(sp_name, folder, thr_criteria){
   return(ths)
 }
 
-thresh_mean <- function(t_models, df_thr){ #, pred_methods){
+thresh_mean <- function(t_models, df_thr, stats){ #, pred_methods){
   t_models %>% 
     map_dfr(.f=function(x){rename(x@run.info, species="species") %>% 
                            mutate_if(.,is.factor, as.character)}, .id="species") %>%
     #filter(method %in% pred_methods) %>%
     select(species, modelID, method) %>%
-    inner_join(df_thr %>% select(species, modelID, threshold), by=c("species","modelID")) %>%
+    inner_join(df_thr %>% select(species, modelID, (!!sym(stats))), by=c("species","modelID")) %>%
     group_by(species, method) %>% 
-    summarize(mean = mean(threshold), .groups = 'rowwise') %>%
+    summarize(stats = mean((!!sym(stats))), .groups = 'rowwise') %>%
     return()
 }
+
+validation_metrics_from_folder <- function(sp_name, folder, df_thr, stats='threshold', th=NULL){
+  thr_mean <- list()
+  for(sp in sp_name){
+    thr_mean[[sp]] <- sp %>%
+      sp_model_from_folder(folder) %>%
+      unlist() %>%
+      thresh_mean(df_thr[[sp]], stats)
+  }
+  if(!is.null(th)){
+    thr_mean <- lapply(thr_mean, function(x){x[x[,"stats"]>th,]})
+  }
+  
+  return(thr_mean)
+} 
 
 sp_thresh_mean_from_folder <- function(sp_name, folder, df_thr){
   thr_mean <- list()
@@ -271,122 +289,127 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
 #df_pa = df_pa
 #scenarios_list =   projection_data
 #models_folder =   folder_models
-#shp_grid =   grid_study_area
-#pred_methods =   algo
+#pred_methods =   model_selection
 #thr_criteria =   thresh_criteria
 #output_folder =   directory_projections
 #
 #thresholds_models_means
-#sp = colnames(df_pa)[8]
-#scenario_name = names(scenarios_list)[2]
+#sp = colnames(df_pa)[5]
+#scenario_name = names(scenarios_list)[5]
 
-predict_to_folder <- function(df_pa, scenarios_list, models_folder, shp_grid, pred_methods, thr_criteria, output_folder, thresholds_models_means){
+predict_to_folder <- function(df_pa, scenarios_list, models_folder, pred_methods, thr_criteria, output_folder, thresholds_models_means){
   if ('geometry' %in% colnames(df_pa)){
     spp_names <- colnames(df_pa)[-grep("geometry", colnames(df_pa))]
   } else {
     spp_names <- colnames(df_pa)
   }
   
+  names(thresholds_models_means) <- lapply(thresholds_models_means, function(x){unique(x$species)})
+  selected_models <- lapply(pred_methods, function(x) x$method)
+  
   for (sp in spp_names){
-    t_models <- sp %>%
-      sp_model_from_folder(models_folder)
-    if (scenarios_list %>% is.data.frame()){
-      scenarios_list <- scenarios_list %>%
-        list() %>%
-        set_names("scenarios")
-    }
-    
-    names(thresholds_models_means) <- lapply(thresholds_models_means, function(x){unique(x$species)})
-    th <- thresholds_models_means[[sp]] %>% arrange(method)
-    th <- th$mean
-    for (scenario_name in names(scenarios_list)){
-      folder_tmp <- output_folder %>% path(sp) %>% path(scenario_name)
-      file_tmp <- scenario_name
+    if(selected_models[[sp]] %>% length() == 0){
+      print(paste0("No model passing the threshold for ",sp))
+    } else {
+      t_models <- sp %>%
+        sp_model_from_folder(models_folder)
+      if (scenarios_list %>% is.data.frame()){
+        scenarios_list <- scenarios_list %>%
+          list() %>%
+          set_names("scenarios")
+      }
       
-      if (!dir_exists(folder_tmp)){
-        df_pred_freq <- scenarios_list %>% 
-          pluck(scenario_name) %>% 
-          DRE_predict(t_models %>% pluck(sp), pred_methods, thr_criteria)
+      th <- thresholds_models_means[[sp]] %>% arrange(method)
+      th <- th$stats
+      for (scenario_name in names(scenarios_list)){
+        folder_tmp <- output_folder %>% path(sp) %>% path(scenario_name)
+        file_tmp <- scenario_name
         
-        # Consenso
-        #df_pred_freq <- df_pred_freq %>% 
-        #  mutate(consenso=rowMeans(.))
-        consensus <- df_pred_freq %>% rowMeans()
-        
-        # Weighted mean (AUC)
-        ids <- getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria)$modelID
-        df <- cbind(algo=getModelInfo(t_models[[sp]])$method[ids],
-                    getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria))
-        w <- aggregate(df$AUC, by=list(df$algo), FUN=mean)$x
-        wmean_AUC <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
-        
-        # Weighted mean (TSS)
-        w <- aggregate(df$TSS, by=list(df$algo), FUN=mean)$x
-        wmean_TSS <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
-       
-        
-        # include ensembles in data.frame
-        df_pred_freq$consensus <- consensus
-        df_pred_freq$wmean_AUC <- wmean_AUC
-        df_pred_freq$wmean_TSS <- wmean_TSS
-        
-        # Consenso usando presenca/ausencia
-        df_pred_pres_aus <- df_pred_freq %>%
-          select(-c(consensus, wmean_AUC, wmean_TSS)) %>% 
-          select(sort(names(.))) %>%
-          mutate_all(funs(ifelse(. > th, 1, 0))) %>% 
-          mutate(consensus = rowMeans(.) %>% round(., digits = 0))
-        
-        # Ensembles:
-        df_pred_freq <- rep(sp, nrow(df_pred_freq)) %>% 
-          as.data.frame() %>% 
-          rename("species"=".") %>%
-          bind_cols(rep(scenario_name, nrow(df_pred_freq)) %>% as.data.frame()) %>%
-          rename("scenario"=".") %>%
-          bind_cols(df_pred_freq)
-        
-        df_pred_pres_aus <- rep(sp, nrow(df_pred_pres_aus)) %>% 
-          as.data.frame() %>% 
-          rename("species"=".") %>%
-          bind_cols(rep(scenario_name, nrow(df_pred_pres_aus)) %>% as.data.frame()) %>%
-          rename("scenario"=".") %>%
-          bind_cols(df_pred_pres_aus)
-        
-        
-        folder_tmp %>% 
-          dir_create(recurse = T)
-        
-        colnames(df_pred_freq) <- df_pred_freq %>% 
-          colnames() %>%
-          to_snake_case() %>%
-          abbreviate(minlength = 10) %>%
-          unname()
-        
-        suppressMessages(
-          df_pred_freq %>%
-            vroom_write(
-              folder_tmp %>% 
-                path(file_tmp) %>% 
-                paste0("_freq.csv"),
-              delim = ";"
-            )
-        )
-        
-        #colnames(df_pred_pres_aus) <- df_pred_freq %>% 
-        #  colnames() %>%
-        #  to_snake_case() %>%
-        #  abbreviate(minlength = 10) %>%
-        #  unname()
-        
-        suppressMessages(
-          df_pred_pres_aus %>%
-            vroom_write(
-              folder_tmp %>% 
-                path(file_tmp) %>% 
-                paste0("_pa.csv"),
-              delim = ";"  
-            )
-        )
+        if (!dir_exists(folder_tmp)){
+          df_pred_freq <- scenarios_list %>% 
+            pluck(scenario_name) %>% 
+            DRE_predict(t_models %>% pluck(sp), selected_models[[sp]], thr_criteria)
+          
+          # Consenso
+          #df_pred_freq <- df_pred_freq %>% 
+          #  mutate(consenso=rowMeans(.))
+          consensus <- df_pred_freq %>% rowMeans()
+          
+          # Weighted mean (AUC)
+          ids <- getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria)$modelID
+          df <- cbind(algo=getModelInfo(t_models[[sp]])$method[ids],
+                      getEvaluation(t_models[[sp]], stat=c('TSS','AUC','threshold'), wtest="dep.test", opt=thr_criteria))
+          w <- aggregate(df$AUC, by=list(df$algo), FUN=mean)$x
+          wmean_AUC <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
+          
+          # Weighted mean (TSS)
+          w <- aggregate(df$TSS, by=list(df$algo), FUN=mean)$x
+          wmean_TSS <- apply(df_pred_freq, 1, function(x) sum(x * w)/(df$algo %>% unique() %>% length()))
+          
+          
+          # include ensembles in data.frame
+          df_pred_freq$consensus <- consensus
+          df_pred_freq$wmean_AUC <- wmean_AUC
+          df_pred_freq$wmean_TSS <- wmean_TSS
+          
+          # Consenso usando presenca/ausencia
+          df_pred_pres_aus <- df_pred_freq %>%
+            select(-c(consensus, wmean_AUC, wmean_TSS)) %>% 
+            select(sort(names(.))) %>%
+            mutate_all(funs(ifelse(. > th, 1, 0))) %>% 
+            mutate(consensus = rowMeans(.) %>% round(., digits = 0))
+          
+          # Ensembles:
+          df_pred_freq <- rep(sp, nrow(df_pred_freq)) %>% 
+            as.data.frame() %>% 
+            rename("species"=".") %>%
+            bind_cols(rep(scenario_name, nrow(df_pred_freq)) %>% as.data.frame()) %>%
+            rename("scenario"=".") %>%
+            bind_cols(df_pred_freq)
+          
+          df_pred_pres_aus <- rep(sp, nrow(df_pred_pres_aus)) %>% 
+            as.data.frame() %>% 
+            rename("species"=".") %>%
+            bind_cols(rep(scenario_name, nrow(df_pred_pres_aus)) %>% as.data.frame()) %>%
+            rename("scenario"=".") %>%
+            bind_cols(df_pred_pres_aus)
+          
+          
+          folder_tmp %>% 
+            dir_create(recurse = T)
+          
+          colnames(df_pred_freq) <- df_pred_freq %>% 
+            colnames() %>%
+            to_snake_case() %>%
+            abbreviate(minlength = 10) %>%
+            unname()
+          
+          suppressMessages(
+            df_pred_freq %>%
+              vroom_write(
+                folder_tmp %>% 
+                  path(file_tmp) %>% 
+                  paste0("_freq.csv"),
+                delim = ";"
+              )
+          )
+          
+          #colnames(df_pred_pres_aus) <- df_pred_freq %>% 
+          #  colnames() %>%
+          #  to_snake_case() %>%
+          #  abbreviate(minlength = 10) %>%
+          #  unname()
+          
+          suppressMessages(
+            df_pred_pres_aus %>%
+              vroom_write(
+                folder_tmp %>% 
+                  path(file_tmp) %>% 
+                  paste0("_pa.csv"),
+                delim = ";"  
+              )
+          )
+        }
       }
     }
   }
@@ -622,7 +645,17 @@ model_failures <- function(fitted_data, models_folder){
 #  }
 #}
 
-pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m="k-means", n_pa=1, output_folder=here("output_data/models")){
+#shp_pa=shp_matrix_pa
+#df_var=df_var_preditors
+#especies=spp_names
+#method="cluster"
+#cluster_m="k-means"
+#n_pa=1
+#output_folder=here("output_data/models")
+
+#sp=colnames(df_pa)[1]
+
+pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster_m="kmeans", n_pa=1, output_folder=here("output_data/models")){
   especies <- especies %>% 
     to_snake_case() %>% 
     abbreviate(minlength = 10) %>%
@@ -630,9 +663,8 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
   
   df_pa <- shp_pa %>% as.data.frame() %>% select(-c('geometry'))
   
-  #df_pa <- shp_pa %>% select(all_of(especies)). ## rgdal version
-  .add_grupos <- function(a_df, a_df_p, percent_grupos=NA, nro_grupos=NA, cluster_m="k-means"){
-    if (cluster_m=="k-means"){
+  .add_grupos <- function(a_df, a_df_p, percent_grupos=NA, nro_grupos=NA, cluster_m="kmeans"){
+    if (cluster_m=="kmeans"){
       if (is.na(nro_grupos)) {
         nro_grupos <- round(nrow(a_df_p)/percent_grupos)  
       }
@@ -642,17 +674,18 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
         kmeans(nro_grupos) %>%
         pluck("cluster") %>%
         as.factor()
+      return(a_df)
     }
-    else {
-      # Não está funcionando
-      if (is.na(nro_grupos)){
-        nro_grupos <- ceiling(nrow(a_df_p)/percent_grupos)  
-      } 
-      a_df$grupo <- a_df %>% 
-        as.matrix() %>% 
-        Xmeans(nrow(a_df)/100, nthread = 3, min.clust.size = nro_grupos) %>%
-        pluck("cluster")
-    }
+    #else {
+    #  # Não está funcionando
+    #  if (is.na(nro_grupos)){
+    #    nro_grupos <- ceiling(nrow(a_df_p)/percent_grupos)  
+    #  } 
+    #  a_df$grupo <- a_df %>% 
+    #    as.matrix() %>% 
+    #    Xmeans(nrow(a_df)/100, nthread = 3, min.clust.size = nro_grupos) %>%
+    #    pluck("cluster")
+    #}
     return(a_df)
   }
   
@@ -675,38 +708,46 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
   if (method == "cluster") {
     backgrounds = list()
     for (sp in colnames(df_pa)){
-      df_p <- df_pa %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
-      df_var <- df_var %>% .add_grupos(df_p, percent_grupos = 10, cluster_m = cluster_m) # k = 10% do numero de pres.
-      grupos <- df_var %>% .get_summary_from(df_pa[[sp]])
-      
-      df_bg <- df_var %>%
-        bind_cols(especie=df_pa[[sp]]) %>%
-        filter(especie==0) %>%
-        filter(grupo %in% grupos$grupo) %>%
-        group_by(grupo) %>% 
-        select(-especie) %>%
-        nest() %>%
-        ungroup() %>%
-        mutate(n=grupos$quant_cel_bg) 
-      
-      df_bg_tmp <- try(
-        df_bg %>% 
-          mutate(samp = map2(data, n, sample_n)) %>% 
-          select(-data, -n, -grupo) %>%
-          unnest(samp)
-      )
-      if ("try-error" %in% class(df_bg_tmp)){
-        df_bg <- df_bg %>% 
-          mutate(samp = map2(data, n, ~ sample_n(.x, .y, replace = T))) %>% 
-          select(-data, -n, -grupo) %>%
-          unnest(samp)
+      if (!file_exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
+        df_p <- df_pa %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
+        print(colnames(df_var))
+        df_var2 <- df_var %>% .add_grupos(df_p, percent_grupos = 10, cluster_m = cluster_m) # k = 10% do numero de pres.
+        print(colnames(df_var2))
+        grupos <- df_var2 %>% .get_summary_from(df_pa[[sp]])
+        
+        df_bg <- df_var2 %>%
+          bind_cols(especie=df_pa[[sp]]) %>%
+          filter(especie==0) %>%
+          filter(grupo %in% grupos$grupo) %>%
+          group_by(grupo) %>% 
+          select(-especie) %>%
+          nest() %>%
+          ungroup() %>%
+          mutate(n=grupos$quant_cel_bg) 
+        
+        df_bg_tmp <- try(
+          df_bg %>% 
+            mutate(samp = map2(data, n, sample_n)) %>% 
+            select(-data, -n, -grupo) %>%
+            unnest(samp)
+        )
+        if ("try-error" %in% class(df_bg_tmp)){
+          df_bg <- df_bg %>% 
+            mutate(samp = map2(data, n, ~ sample_n(.x, .y, replace = T))) %>% 
+            select(-data, -n, -grupo) %>%
+            unnest(samp)
+        }
+        else {
+          df_bg <- df_bg_tmp
+        }
+        
+        backgrounds <- backgrounds %>% 
+          append(list(df_bg) %>% set_names(sp))
+        
+        write.csv(df_bg, paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
+      } else {
+        backgrounds[[sp]] <- read.csv(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), sep=',')
       }
-      else {
-        df_bg <- df_bg_tmp
-      }
-      
-      backgrounds <- backgrounds %>% 
-        append(list(df_bg) %>% set_names(sp))
     }
     return(backgrounds)
     # # visualização dos pontos de background
@@ -735,6 +776,50 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
     #   coord_equal()
     
   }
+  
+  if (method == "envelope" || method == "bioclim"){
+    backgrounds = list()
+    for (sp in colnames(df_pa)){
+      if(!file.exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
+        if(!file.exists(paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))){
+          print(paste0("Building pseudoabsences for ",sp,"..."))
+          
+          sp_dat <- cbind(df_pa,df_var)
+          sp_dat <- sp_dat[sp_dat[,sp]==1,]
+          sp_dat <- sp_dat %>% select(sp,all_of(names(df_var)))
+          
+          d <- sdmData(reformulate(termlabels = c('bio_1', 'bio_12'), response = sp),
+                       train = sp_dat)
+
+          m <- sdm(~.,
+                   data = d,
+                   methods='bioclim')
+
+          p <- predict(m, df_var,
+                       filename=paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))
+        } else {
+          p <- raster(paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))
+        }
+        p[p[]>0] <- NA
+        env2 <- df_var[!is.na(p),]
+        
+        if(nrow(env2) > nrow(sp_dat)){
+          pa <- env2[sample(nrow(env2), nrow(sp_dat)),]
+        } else {
+          pa <- env2[sample(nrow(env2), nrow(sp_dat), replace = T),]
+        }
+        
+        backgrounds <- backgrounds %>% 
+          append(list(pa) %>% set_names(sp))
+        
+        write.csv(pa, paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
+      } else {
+      backgrounds[[sp]] <- read.csv(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), sep=',')
+      }
+    }
+    return(backgrounds)
+  }
+  
   if (method == "dre_area" || method == "dre_dens"){
     quant_max <- 0
     num_grupo_quant_max <- 2
@@ -819,6 +904,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
     }
     return(backgrounds)
   } 
+  
   if (method == "random") {
     
     backgrounds = list()
@@ -826,7 +912,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
     for (sp in especies){
       output_folder_tmp <- output_folder %>%
         path(sp)
-      if (!file_exists(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
+      if (!file_exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
         dir_create(output_folder_tmp)
         
         n_pa2 <- df_pa[[sp]] %>% sum()
@@ -845,9 +931,9 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="random", cluster_m
           df_bg <- df_bg %>% select(-'geometry')
         }
         
-        write.csv(df_bg, paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
+        write.csv(df_bg, paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), row.names = F)
       } else {
-        backgrounds[[sp]] <- read.csv(paste0('output_data/models/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), sep=',')
+        backgrounds[[sp]] <- read.csv(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'), sep=',')
       }
     }
     return(backgrounds)

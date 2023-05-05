@@ -45,7 +45,6 @@ occurrences_to_shapefile <- function(o_file, sp_names, shp){
   
   coordinates(sp_occurrences) <- ~decimal_longitude+decimal_latitude
   
-
   crs(sp_occurrences) <-  CRS("+init=epsg:4326")
   
   sp_occurrences %>%  

@@ -53,7 +53,8 @@ library(vroom)                               # le arquivos csv
 library(janitor)                             # faz limpeza de datasets e nomes de variáveis
 library(snakecase)                           # transformação de strings em snake case
 library(lubridate)                           # manipulação de datas
-library(rgbif)                               # download GBIF data.
+library(rgbif)                               # download GBIF data
+library(httr)                                # download data from web
 
 select <- dplyr::select
 here <- here::here
@@ -658,16 +659,15 @@ predictions_means <- function(predictions_sp, scenarios){
 WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030', gcm = 'mi', ssp = '126', resolution = 10){
   
   res = ifelse(resolution==30,'s','m')
-  
+  #GET(url, write_disk("iris.xlsx", overwrite=TRUE))
   if(period=='current'){
       if(!dir.exists('input_data/WorldClim_data_current')){ dir.create('input_data/WorldClim_data_current') }
       if(length(list.files("input_data/WorldClim_data_current",pattern='.tif$', full.names=T))==0){
         print(paste0('current_',resolution,res))
-        download.file(url = paste0('https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_',
+        GET(url = paste0('https://geodata.ucdavis.edu/climate/worldclim/2_1/base/wc2.1_',
                                    resolution,
                                    res,'_bio.zip'),
-                      destfile = paste0('input_data/current_', resolution, res,'.zip'),
-                      method = 'auto')
+                      write_disk(paste0('input_data/current_', resolution, res,'.zip')))
         unzip(zipfile = paste0('input_data/current_', resolution, res,'.zip'),
               exdir = paste0('input_data/WorldClim_data_current'))        
       } else {
@@ -695,13 +695,12 @@ WorldClim_data <- function(period = 'current', variable = 'bioc', year = '2030',
         for (y in 1:length(year)) {
           if(!file.exists(paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],'_', resolution, '_', year[y],'.tif'))){
             print(paste0(gcm[g], '_ssp', ssp[s], '_', resolution, '_', year[y]))
-            download.file(url = paste0('https://geodata.ucdavis.edu/cmip6/',resolution,
+            GET(url = paste0('https://geodata.ucdavis.edu/cmip6/',resolution,
                                        res,'/',gcm3[g],'/ssp',ssp[s],'/wc2.1_',resolution,
                                        res,'_',variable,'_',gcm3[g],'_ssp',ssp[s],'_',
                                        year3[y],'.tif'),
-                          destfile = paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],
-                                            '_', resolution, '_', year[y],'.tif'),
-                          method = 'auto')
+                write_disk(paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],
+                                            '_', resolution, '_', year[y],'.tif')))
           } else {
             print(paste0('The file for future scenario (',
                          paste0('input_data/WorldClim_data_future/',gcm[g], '_ssp', ssp[s],'_', resolution,res, '_', year[y],'.tif'),
