@@ -64,8 +64,8 @@ fit_data <- function(df_pa, df_var, df_bg){
     fitted_data <- fitted_data %>% 
       append(list(predict_data) %>% set_names(sp))
   }
-  names(result) <- sp_names
-  return(result)
+  names(fitted_data) <- colnames(df_pa)
+  return(fitted_data)
 }
 
 train_models <- function(df_pa, fitted_data, pred_methods, n_exec, n_folds){
@@ -782,13 +782,17 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
     for (sp in colnames(df_pa)){
       if(!file.exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
         if(!file.exists(paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))){
+          
+          if(!dir.exists(paste0(output_folder,'/',sp))){
+            dir.create(paste0(output_folder,'/',sp), recursive=T)
+          }
           print(paste0("Building pseudoabsences for ",sp,"..."))
           
           sp_dat <- cbind(df_pa,df_var)
           sp_dat <- sp_dat[sp_dat[,sp]==1,]
           sp_dat <- sp_dat %>% select(sp,all_of(names(df_var)))
           
-          d <- sdmData(reformulate(termlabels = c('bio_1', 'bio_12'), response = sp),
+          d <- sdmData(reformulate(termlabels = names(df_var), response = sp),
                        train = sp_dat)
 
           m <- sdm(~.,

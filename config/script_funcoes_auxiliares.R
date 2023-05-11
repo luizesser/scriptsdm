@@ -63,7 +63,7 @@ map <- purrr::map
 options(java.parameters = "-Xmx1g", java.awt.headless="true")
 source(here("config/ggcorrplot.R"))
 source(here("config/xmeans.R"))
-source(here("config/algoritmos_predicao.R"))
+#source(here("config/algoritmos_predicao.R"))
 source(here("config/geoprocessamento_novo.R"))
 source(here("config/ocorrencias.R"))
 source(here("config/avaliacao_variaveis_preditoras.R"))
@@ -644,11 +644,17 @@ predictions_means <- function(predictions_sp, scenarios){
   result <- l[[1]]
   df <- l %>% as.data.frame()
   scenarios <- gsub("-",".",scenarios)
-  scenarios2 <- c('current',sort(scenarios))
+  if('current' %in% colnames(df)){scenarios2 <- c('current',sort(scenarios))} else {scenarios2 <- scenarios}
   for(s in scenarios2){
-    result <- cbind(result, rowMeans(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
-    result <- cbind(result, rowMeans(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
-    result <- cbind(result, rowSums(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+    if(length(sp_names)==1){
+      result <- cbind(result, mean(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
+      result <- cbind(result, mean(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+      result <- cbind(result, sum(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+    } else {
+      result <- cbind(result, rowMeans(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
+      result <- cbind(result, rowMeans(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+      result <- cbind(result, rowSums(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+    }
   }
   result <- result[,-c(1:ncol(l[[1]]))]
   names(result) <- sort(c(paste0(scenarios2, '_pa_mean'), paste0(scenarios2, '_pa_sums'), paste0(scenarios2, '_freq_mean')))
