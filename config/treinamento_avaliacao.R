@@ -207,7 +207,7 @@ sp_thresh_mean_from_folder <- function(sp_name, folder, df_thr){
 } 
 
 sp_model_from_folder <- function(sp_name, folder){
-  if(nchar(sp_name)>10){
+  if(nchar(sp_name)>11){
     sp_name <- sp_name %>% 
       to_snake_case() %>% 
       abbreviate(minlength = 10) %>% 

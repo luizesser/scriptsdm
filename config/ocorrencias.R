@@ -7,34 +7,37 @@
 #
 
 occurrences_to_shapefile <- function(o_file, sp_names, shp){
-  if(!is.null(sp_names)){
-    sp_names <- sp_names %>% 
-      to_snake_case() %>% 
-      abbreviate(minlength = 10)
-  }
+  #if(!is.null(sp_names)){
+  #  sp_names2 <- sp_names %>% 
+  #    to_snake_case() %>% 
+  #    abbreviate(minlength = 10)
+  #}
   
   suppressMessages(
     sp_occurrences <- o_file %>%
       vroom() %>%
       clean_names() %>%
-      remove_empty(c("rows", "cols")) %>%
-      mutate(species=species %>% to_snake_case() %>% abbreviate(minlength = 10))
+      remove_empty(c("rows", "cols"))
   )
   
   if(is.null(sp_names)){
     sp_names <- sp_occurrences$species %>% unique()
   }
   
-  #if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0){
-  #  sp_occurrences <-  sp_occurrences %>%
-  #    filter(species %in% sp_names)
-  #}x
+  if (!is.na(sp_names) && !is.null(sp_names) && length(sp_names)>0){
+    sp_occurrences <-  sp_occurrences %>%
+      filter(species %in% sp_names)
+  }
 
+  
   if (is.character(shp)){
     shp <- shp %>% 
       st_read(verbose = F)
   }
 
+  sp_occurrences <- sp_occurrences %>%
+    mutate(species=species %>% to_snake_case() %>% abbreviate(minlength = 10))
+  
   sp_occurrences$decimal_longitude <- sp_occurrences$decimal_longitude %>% 
     as.character() %>% 
     as.numeric()

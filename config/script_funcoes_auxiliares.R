@@ -188,11 +188,38 @@ ensemble_map <- function(df_pred, shp_estudo){
   
   mapa_temp <- ggplot(st_as_sf(df)) +
       geom_sf(aes(fill = df_pred), color=NA) +
-      scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,max(df$df_pred))) +
-      ggtitle(paste0('Ensemble'))
+      scale_fill_continuous(name = "Frequence", type='viridis', limits=c(0,max(df$df_pred)), option='C') +
+      ggtitle(paste0('Current'))
 
   return(mapa_temp)
 }
+
+#ensemble_map <- function(df_pred, shp_estudo){
+#  shp_estudo <- cbind(shp_estudo, df_pred)
+#  df <- as.data.frame(shp_estudo)
+#  df$df_pred <- as.numeric(df$df_pred)
+#  
+#  mapa_temp <- ggplot(st_as_sf(df)) +
+#    geom_sf(aes(fill = df_pred), color=NA) +
+#    scale_fill_continuous(low="#D1392C", high="#4A7CB3", limits=c(0,max(df$df_pred))) +
+#    ggtitle(paste0('Ensemble'))
+#  
+#  return(mapa_temp)
+#}
+
+gcm_ensemble <- function(pred_means, ssp=c('ssp245')){
+  p <- pred_means
+  l <- lapply(ssp, function(x){
+    p2 <- p[,grep(x,colnames(p))]
+    p3 <- data.frame(freq_mean=rowMeans(p2[grep('freq_mean', colnames(p2))]),
+                     pa_mean=rowMeans(p2[grep('pa_mean', colnames(p2))]),
+                     pa_sums=rowMeans(p2[grep('pa_sums', colnames(p2))]))
+    return(p3)
+  })
+  names(l) <- ssp
+  return(l)
+}
+
 
 distribution_map <- function(df_pred, shp_estudo, returnRasters=F){
   shp_estudo <- cbind(shp_estudo, df_pred)

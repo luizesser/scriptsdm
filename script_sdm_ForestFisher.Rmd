@@ -1,6 +1,8 @@
 ---
 title: "Species Distribution Modeling in R"
 author: "Luíz Fernando Esser, Reginaldo Ré, Edivando V. do Couto"
+params:
+  especie: "Colossoma.macropomum"
 output:
   html_document:
     df_print: paged
@@ -49,7 +51,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 ```{r message=FALSE, warning=FALSE, include=FALSE}
-source("./config/script_funcoes_auxiliares.R") 
+source("config/script_funcoes_auxiliares.R")
 ```
 
 
@@ -72,11 +74,11 @@ options(timeout=600)
 
 # Current data
 # Files are automatically saved in input_data folder.
-WorldClim_data('current', variable = 'bioc', resolution = 10)
+#WorldClim_data('current', variable = 'bioc', resolution = 2.5)
 
 # Future data
-gcms <- c('ac', 'ca', 'mr', 'mi')
-WorldClim_data('future', variable = 'bioc', year = '2090', gcm = gcms, ssp = c('585'), resolution = 10) 
+gcms <- c('cc', 'gg', 'mr', 'uk')
+#WorldClim_data('future', variable = 'bioc', year = '2090', gcm = gcms, ssp = c('245'), resolution = 2.5) 
 ```
 
 
@@ -106,10 +108,10 @@ a) Inputs:
 shape_study_area_file <- here("input_data/shape_study_area/AmazonHydroRivers4.shp")  
 
 # Directory name containing current rasters to be rescaled.
-folder_current_rasters <- here("input_data/WorldClim_data_current")
+folder_current_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_current"
 
 # Directory name containing future rasters to be rescaled.
-folder_future_rasters <- here("input_data/WorldClim_data_future")
+folder_future_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_future"
 ```
 
 
@@ -117,16 +119,16 @@ b) Outputs:
 
 ```{r}
 # Name of shapefile (.shp) for the study area to be saved.
-output_shp_study_area <- here("output_data/grid/Amazonia_grid.shp")
+output_shp_study_area <- "~/projetos/ForestFisher/job/output_data/grid/Colossoma_grid.shp"
 
 # Name of R object (.rds) where the current rescaled variables will be saved.
-output_shp_current <- here("output_data/WorldClim_data_current_rescaled/Amazonia_current.rds")
+output_shp_current <- "~/projetos/ForestFisher/job/output_data/WorldClim_data_current_rescaled/Colossoma_current.rds"
 
 # Set scenarios names:
-scenarios <- apply(expand.grid(gcms, c("ssp585")), 1, paste, collapse="_")
+scenarios <- apply(expand.grid(gcms, c("ssp245"),"2.5", 2090), 1, paste, collapse="_")
 
 # Name of R object (.rds) where the future rescaled variables will be saved.
-output_shp_future <- here(paste0("output_data/WorldClim_data_future_rescaled/",
+output_shp_future <- here(paste0("~/projetos/ForestFisher/job/output_data/WorldClim_data_future_rescaled/",
                                  scenarios,
                                  ".rds"))
 ```
@@ -140,16 +142,16 @@ c) Seting up some important variables:
 
 # Following values build a grid with 100 x 100 km.
 epsg = 6933
-cell_width = 100000
-cell_height = 100000
+cell_width = 5000
+cell_height = 5000
 # Note that setting those values to build a grid smaller than the input rasters may generate NaNs, causing some problems.
 
 # If you have any variable in shape_study_area that you want to keep for rescaling, you can set here.
 # Set the correct names of variables using as much as 10 characters.
 # Setting the names to list() will use none of the variables in the shape, while setting it to NULL will use all variables.
-names_var_shp_study_area <-  c("HYRIV_ID", "NEXT_DOWN", "MAIN_RIV", "LENGTH_KM", 
+names_var_shp_study_area <-  c("NEXT_DOWN", "MAIN_RIV", "LENGTH_KM", 
                                "DIST_DN_KM", "DIST_UP_KM", "CATCH_SKM", "UPLAND_SKM", 
-                               "DIS_AV_CMS", "ORD_STRA", "ORD_CLAS", "ORD_FLOW", "HYBAS_L12")
+                               "DIS_AV_CMS", "ORD_STRA", "ORD_CLAS", "ORD_FLOW")
 raster_vars <- paste0('bio_', 1:19)
 
 # As in the codeline above, here we set which variables in current rasters we want to keep for rescaling.
@@ -242,14 +244,14 @@ It is necessary to name the output. Be extra careful with extension names.
 a) Input:
 
 ```{r input_own_data, eval=T, include=T}
-spp_data <- here('input_data/spp_data.csv')
+spp_data <- here('input_data/spp_data_complete.csv')
 ```
 
 b) Output:
 
 ```{r files output occurrence, eval=T, include=T}
 #  Set the path to the output shapefile, which will contain the presence/absence matrix.
-spp_output <- here("output_data/spp_pa.shp")
+spp_output <- here("output_data/spp_pa_complete.shp")
 ```
 
 
@@ -259,7 +261,18 @@ It is also necessary to set some other important parameters.
 # Species names to be used in the study. 
 # Names should be identical from input/spp_data.csv obtained previously.
 # Setting this to NULL will use all species.
-spp_names <- read.csv(spp_data)$species %>% table() %>% names()# or NULL
+#spp_names <- especie # or NULL
+spp_names <- c(#"Brycon.amazonicus", "Brycon.falcatus",
+               #"Brycon.melanopterus", "Colossoma.macropomum",
+               #"Hoplerythrinus.unitaeniatus", "Leporinus.brunneus",
+               #"Leporinus.friderici", "Leporinus.klausewitzi",
+               #"Lithodoras.dorsalis", "Megaleporinus.trifasciatus",
+               #"Myloplus.asterias", "Myloplus.rubripinnis",
+               #"Mylossoma.aureum", "Phractocephalus.hemioliopterus",
+               #"Piaractus.brachypomus", "Platynematichthys.notatus",    
+               "Pristobrycon.calmoni", "Pristobrycon.striolatus",    
+               "Auchenipterichthys.thoracatus","Brycon.pesu"
+               )
 ```
 
 
@@ -269,8 +282,9 @@ spp_names <- read.csv(spp_data)$species %>% table() %>% names()# or NULL
 occ_shp <- spp_data %>% 
   occurrences_to_shapefile(spp_names, grid_study_area)
 
-mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 1, layer.name = "Study Area", legend=NULL) +
-  mapview(occ_shp, zcol = "species", layer.name = "Species") 
+
+#mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 1, layer.name = "Study Area", legend=NULL) +
+#  mapview(occ_shp, zcol = "species", layer.name = "Species") 
 ```
 
 
@@ -283,7 +297,7 @@ We will say to the grid_study_area which cells have an occurrence record for the
     abbreviate(minlength = 10) %>% 
     as.vector()
 
-if (spp_output %>% file_exists() == F) {
+#if (spp_output %>% file_exists() == F) {
   grid_matrix_pa <- occ_shp %>% 
     occurrences_to_pa_shapefile(grid_study_area, spp_names)
   
@@ -291,18 +305,18 @@ if (spp_output %>% file_exists() == F) {
     path_dir() %>% 
     dir_create()
   
-  grid_matrix_pa %<>% select(c(spp_names_abv))
+  grid_matrix_pa %<>% select(all_of(spp_names_abv))
   
-  grid_matrix_pa %>% st_write(dsn = spp_output)
-} else {
-  grid_matrix_pa <- spp_output %>% st_read()
-}
+#  grid_matrix_pa %>% st_write(dsn = spp_output)
+#} else {
+#  grid_matrix_pa <- spp_output %>% st_read()
+#}
 
 grid_matrix_pa %>% 
   as.data.frame() %>% 
   select(all_of(spp_names_abv)) %>% 
   rowSums() %>% 
-  as.vector() %>%
+  as.vector() %>% 
   richness_map(., grid_study_area)
 ```
 
@@ -318,7 +332,7 @@ presences_number(grid_matrix_pa, spp_names)
 Variable Selection must be done OR with a VIF routine, OR with a PCA.
 To perform a VIF routine, we will use only the environmental data from the occurrence data.
 
-```{r vif_bio, eval=T, include=T}
+```{r vif_bio, eval=F, include=T}
 # Obtain occurrence data.frame and environmental variables:
 df_vif <- get_df_vif(grid_current, grid_matrix_pa)
 
@@ -350,8 +364,7 @@ shp_preds_future <- here("output_data/pca/shp_preds_future.rds")
 b) Transforming objects to be used in the next steps:
 
 ```{r setting up PCA, eval=T, include=T}
-shp_matrix_pa <-  spp_output %>%
-  st_read()
+shp_matrix_pa <- grid_matrix_pa
 
 df_species <- shp_matrix_pa %>% 
   as.data.frame() %>%
@@ -372,10 +385,10 @@ var_normalization <- tolower(current_var_names) # OR: paste0("bio_",1:19)
 var_pca_bio <- var_normalization # OR: paste0("bio_",1:19)
 
 # Number of PCA-axes to be retained.
-nr_comp_pca_bio <- 4
+nr_comp_pca_bio <- 7
 
 # Names of variables to be used as predictors when training the models. It can be environmental variables or PCA-axes.
-var_predictors <-c("dim_1_bio","dim_2_bio","dim_3_bio","dim_4_bio")
+var_predictors <-c("dim_1_bio","dim_2_bio","dim_3_bio","dim_4_bio","dim_5_bio","dim_6_bio","dim_7_bio" )
 ```
 
 
@@ -545,7 +558,7 @@ pca_future %>%
 As in previous steps, it is necessary to set inputs and outputs, taking extra care with extension names.
 a) Input:
 If you want to use PCA:
-```{r , eval=F, include=T}
+```{r , eval=T, include=T}
 # To use PCA-axis:
 df_var_preditors <- df_potential_predictors[,colnames(df_potential_predictors) %in% var_predictors] # PCA
 grid_future <- pca_future # PCA
@@ -554,7 +567,7 @@ grid_future[[1]]
 ```
 
 If you want to use VIF or raw predictors:
-```{r , eval=T, include=T}
+```{r , eval=F, include=T}
 # To use raw predictors (VIF):
 df_var_preditors <- grid_current %>% as.data.frame() %>% select(-c('geometry', 'cell_id', 'y_centroid', 'x_centroid')) # raw predictors
 grid_future <- lapply(output_shp_future,function(x){readRDS(x)}) # raw predictors
@@ -576,7 +589,7 @@ c) Control Variables:
 ```{r control_variables_training, eval=T, include=T}
 # Algorithm names to be used in Species Distribution Modeling.
 # Run getmethodNames() to unveil which algorithms are available.
-algo <- c("mlp", "svm", "brt")
+algo <- c("rbf", "svm", "mda")
 
 # Set the threshold criteria.
 # 1:sp=se, 2:max(se+sp), 3:min(cost), 4:minROCdist, 5:max(kappa), 6:max(ppv+npv), 7:ppv=npv, 8:max(NMI), 9:max(ccr), 10: prevalence
@@ -613,14 +626,14 @@ tsne_list
 
 ## Join data
 As we are using the sdm package, let's start to build our models by indicating our input data.
-```{r pca_pseudoabsence, eval=F, include=T}
+```{r pca_pseudoabsence, eval=T, include=T}
 # For PCA routine:
 for(s in colnames(df_species)){
   df_pseudoabsences[[s]] <- df_pseudoabsences[[s]][,var_predictors]
 }
 ```
 
-```{r vif_pseudoabsence,  eval=T, include=T}
+```{r vif_pseudoabsence,  eval=F, include=T}
 # For VIF routine:
 for(s in colnames(df_species)){
   df_pseudoabsences[[s]] <- exclude(df_pseudoabsences[[s]], vif_bio[[s]])
@@ -666,7 +679,7 @@ folder_models %>%
 
 How many models failed?
 
-```{r fails, eval=T, include=T}
+```{r fails, eval=F, include=T}
 d %>% 
   model_failures(folder_models)
 ```
@@ -734,32 +747,24 @@ df_pa %>% predict_to_folder(scenarios_list=projection_data,
 ```{r map_pa, eval=T, include=T}
 predictions_sp <- sapply(spp_names, function(x){sp_predictions_from_folder(x,directory_projections)},simplify=F, USE.NAMES = T)
 pred_means <- predictions_means(predictions_sp, scenarios)
-```
+ensembles <- gcm_ensemble(pred_means, ssp=c('current', 'ssp245'))
 
-
-## Presence/Absence Consensus for Colossoma.macropomum in current scenario
-
-```{r map_pa_consensus, eval=T, include=T}
-distribution_map(predictions_sp$clssm_mcrp$current_pa, grid_study_area)
-```
-      
-      
-## Frequence Consensus for Colossoma.macropomum in current scenario
-
-```{r map_frequency, eval=T, include=T}
-distribution_map(predictions_sp$clssm_mcrp$current_freq, grid_study_area)
+# Output ensembles
+for (i in 1:length(ensembles)) {
+  write.csv(ensembles[[i]], paste0(directory_projections,'/',names(ensembles)[i],'.csv'))
+}
 ```
 
 
 ## Frequence map in current scenario for all species
 
 ```{r map_frequency_ensemble, eval=T, include=T}
-ensemble_map(pred_means$current_freq_mean, grid_study_area)
+ensemble_map(ensembles$current$freq_mean, grid_study_area, "Current", 'Frequence')
 ```
 
 
 ## Richness map in current scenario
 
 ```{r richness_map, eval=T, include=T}
-ensemble_map(pred_means$current_pa_sums, grid_study_area)
+ensemble_map(ensembles$current$pa_sums, grid_study_area, "Current", 'Richness')
 ```
