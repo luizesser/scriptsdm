@@ -683,9 +683,9 @@ predictions_means <- function(predictions_sp, scenarios){
   if('current' %in% colnames(df)){scenarios2 <- c('current',sort(scenarios))} else {scenarios2 <- scenarios}
   for(s in scenarios2){
     if(length(sp_names)==1){
-      result <- cbind(result, mean(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
-      result <- cbind(result, mean(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
-      result <- cbind(result, sum(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
+      result <- cbind(result, df[,grep(paste0(s,'_freq.consensus'), colnames(df))])
+      result <- cbind(result, df[,grep(paste0(s,'_pa.consensus'), colnames(df))])
+      result <- cbind(result, df[,grep(paste0(s,'_pa.consensus'), colnames(df))])
     } else {
       result <- cbind(result, rowMeans(df[,grep(paste0(s,'_freq.consensus'), colnames(df))], na.rm = T))
       result <- cbind(result, rowMeans(df[,grep(paste0(s,'_pa.consensus'), colnames(df))], na.rm = T))
