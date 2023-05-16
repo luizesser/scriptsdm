@@ -322,7 +322,7 @@ presences_number(grid_matrix_pa, spp_names)
 Variable Selection must be done OR with a VIF routine, OR with a PCA.
 To perform a VIF routine, we will use only the environmental data from the occurrence data.
 
-```{r vif_bio, eval=F, include=T}
+```{r vif_bio, eval=T, include=T}
 # Obtain occurrence data.frame and environmental variables:
 df_vif <- get_df_vif(grid_current, grid_matrix_pa)
 
@@ -330,7 +330,7 @@ df_vif <- get_df_vif(grid_current, grid_matrix_pa)
 vif_bio <- lapply(df_vif, function(x){vifcor(x,th=0.5)})
 vif_bio[[1]]
 # We can exclude variables with high VIF or go to the next step.
-#grid_current_vif <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
+grid_current <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
                         
 ```
 
@@ -435,7 +435,12 @@ pca_bio <- df_var_pca %>%
 pca_bio$var$loadings %>% 
   round(4) %>% 
   datatable(options = list(pageLength = 10, scrollX=T))
+```
 
+
+Save pca with study area:
+
+```{r save_pca, eval=F}
 if(!dir_exists('output_data/pca/')){
   dir_create('output_data/pca/')
 }
@@ -509,7 +514,7 @@ pca_bio %>%
 ## Generating Shapefile with Predictors
 ### Jointing PCA to variables
 
-```{r}
+```{r, eval=F}
 df_potential_predictors <- df_potential_predictors %>%
   bind_cols(pca_bio$ind$coord %>% as.data.frame()) 
 
@@ -520,7 +525,7 @@ df_potential_predictors %>%
 ```
 
 
-```{r generating_shapefiles_var, eval=T, include=T}
+```{r generating_shapefiles_var, eval=F, include=T}
 if (shp_preds %>% file_exists() == F){
   df_var_preditors <- df_potential_predictors %>% 
     select(var_predictors %>% all_of())
@@ -534,7 +539,7 @@ if (shp_preds %>% file_exists() == F){
 
 
 ## Projecting PCA-axes to the future scenarios.
-```{r saving_pca_future, eval=T, include=T}
+```{r saving_pca_future, eval=F, include=T}
 pca_future <- proj_pca(pca_bio, grid_future)
 pca_future[[1]]
 
@@ -548,7 +553,7 @@ pca_future %>%
 As in previous steps, it is necessary to set inputs and outputs, taking extra care with extension names.
 a) Input:
 If you want to use PCA:
-```{r , eval=T, include=T}
+```{r , eval=F, include=T}
 # To use PCA-axis:
 df_var_preditors <- df_potential_predictors[,colnames(df_potential_predictors) %in% var_predictors] # PCA
 grid_future <- pca_future # PCA
@@ -557,7 +562,7 @@ grid_future[[1]]
 ```
 
 If you want to use VIF or raw predictors:
-```{r , eval=F, include=T}
+```{r , eval=T, include=T}
 # To use raw predictors (VIF):
 df_var_preditors <- grid_current %>% as.data.frame() %>% select(-c('geometry', 'cell_id', 'y_centroid', 'x_centroid')) # raw predictors
 grid_future <- lapply(output_shp_future,function(x){readRDS(x)}) # raw predictors
