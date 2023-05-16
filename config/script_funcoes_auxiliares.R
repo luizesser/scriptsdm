@@ -181,16 +181,19 @@ richness_map <- function(df_pred, shp_estudo){
   return(mapa_temp)
 }
 
-ensemble_map <- function(df_pred, shp_estudo){
+ensemble_map <- function(df_pred, shp_estudo, title, title2){
   shp_estudo <- cbind(shp_estudo, df_pred)
   df <- as.data.frame(shp_estudo)
   df$df_pred <- as.numeric(df$df_pred)
   
   mapa_temp <- ggplot(st_as_sf(df)) +
-      geom_sf(aes(fill = df_pred), color=NA) +
-      scale_fill_continuous(name = "Frequence", type='viridis', limits=c(0,max(df$df_pred)), option='C') +
-      ggtitle(paste0('Current'))
-
+    geom_sf(aes(fill = df_pred), color=NA) +
+    theme_bw() +
+    scale_fill_gradientn(name = title2, colours = rainbow(5, rev=F)) +
+    
+    #scale_fill_continuous(name = title2, type='viridis', limits=c(0,max(df$df_pred)), option='C') +
+    ggtitle(paste0(title))
+  
   return(mapa_temp)
 }
 
@@ -211,9 +214,15 @@ gcm_ensemble <- function(pred_means, ssp=c('ssp245')){
   p <- pred_means
   l <- lapply(ssp, function(x){
     p2 <- p[,grep(x,colnames(p))]
-    p3 <- data.frame(freq_mean=rowMeans(p2[grep('freq_mean', colnames(p2))]),
+    if(ncol(p2[grep('freq_mean', colnames(p2))]) > 1){
+          p3 <- data.frame(freq_mean=rowMeans(p2[grep('freq_mean', colnames(p2))]),
                      pa_mean=rowMeans(p2[grep('pa_mean', colnames(p2))]),
                      pa_sums=rowMeans(p2[grep('pa_sums', colnames(p2))]))
+    } else {
+      p3 <- data.frame(freq_mean=p2[grep('freq_mean', colnames(p2))],
+                       pa_mean=p2[grep('pa_mean', colnames(p2))],
+                       pa_sums=p2[grep('pa_sums', colnames(p2))])
+    }
     return(p3)
   })
   names(l) <- ssp

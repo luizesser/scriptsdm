@@ -74,11 +74,11 @@ options(timeout=600)
 
 # Current data
 # Files are automatically saved in input_data folder.
-#WorldClim_data('current', variable = 'bioc', resolution = 2.5)
+WorldClim_data('current', variable = 'bioc', resolution = 10)
 
 # Future data
 gcms <- c('cc', 'gg', 'mr', 'uk')
-#WorldClim_data('future', variable = 'bioc', year = '2090', gcm = gcms, ssp = c('245'), resolution = 2.5) 
+WorldClim_data('future', variable = 'bioc', year = '2090', gcm = gcms, ssp = c('245'), resolution = 10) 
 ```
 
 
@@ -108,10 +108,10 @@ a) Inputs:
 shape_study_area_file <- here("input_data/shape_study_area/AmazonHydroRivers4.shp")  
 
 # Directory name containing current rasters to be rescaled.
-folder_current_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_current"
+folder_current_rasters <- here("input_data/WorldClim_data_current")
 
 # Directory name containing future rasters to be rescaled.
-folder_future_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_future"
+folder_future_rasters <- here("input_data/WorldClim_data_future")
 ```
 
 
@@ -119,16 +119,16 @@ b) Outputs:
 
 ```{r}
 # Name of shapefile (.shp) for the study area to be saved.
-output_shp_study_area <- "~/projetos/ForestFisher/job/output_data/grid/Colossoma_grid.shp"
+output_shp_study_area <- here("output_data/grid/Colossoma_grid.shp")
 
 # Name of R object (.rds) where the current rescaled variables will be saved.
-output_shp_current <- "~/projetos/ForestFisher/job/output_data/WorldClim_data_current_rescaled/Colossoma_current.rds"
+output_shp_current <- fere("output_data/WorldClim_data_current_rescaled/Colossoma_current.rds")
 
 # Set scenarios names:
-scenarios <- apply(expand.grid(gcms, c("ssp245"),"2.5", 2090), 1, paste, collapse="_")
+scenarios <- apply(expand.grid(gcms, c("ssp245"),"10", 2090), 1, paste, collapse="_")
 
 # Name of R object (.rds) where the future rescaled variables will be saved.
-output_shp_future <- here(paste0("~/projetos/ForestFisher/job/output_data/WorldClim_data_future_rescaled/",
+output_shp_future <- here(paste0("output_data/WorldClim_data_future_rescaled/",
                                  scenarios,
                                  ".rds"))
 ```
@@ -142,8 +142,8 @@ c) Seting up some important variables:
 
 # Following values build a grid with 100 x 100 km.
 epsg = 6933
-cell_width = 5000
-cell_height = 5000
+cell_width = 100000
+cell_height = 100000
 # Note that setting those values to build a grid smaller than the input rasters may generate NaNs, causing some problems.
 
 # If you have any variable in shape_study_area that you want to keep for rescaling, you can set here.
@@ -177,7 +177,7 @@ shape_study_area <- shape_study_area_file %>%
 
 if (output_shp_study_area %>% file_exists()== F){
   grid_study_area <- shape_study_area %>% 
-      make_grid(cell_width, cell_height, names_var_shp_study_area, epsg=epsg) # epsg alvo
+      make_grid(cell_width, cell_height, names_var_shp_study_area, epsg=epsg) # target EPSG
   
   output_shp_study_area %>% 
     path_dir() %>% 
@@ -244,14 +244,14 @@ It is necessary to name the output. Be extra careful with extension names.
 a) Input:
 
 ```{r input_own_data, eval=T, include=T}
-spp_data <- here('input_data/spp_data_complete.csv')
+spp_data <- here('input_data/spp_data.csv')
 ```
 
 b) Output:
 
 ```{r files output occurrence, eval=T, include=T}
 #  Set the path to the output shapefile, which will contain the presence/absence matrix.
-spp_output <- here("output_data/spp_pa_complete.shp")
+spp_output <- here("output_data/spp_pa.shp")
 ```
 
 
@@ -262,17 +262,7 @@ It is also necessary to set some other important parameters.
 # Names should be identical from input/spp_data.csv obtained previously.
 # Setting this to NULL will use all species.
 #spp_names <- especie # or NULL
-spp_names <- c(#"Brycon.amazonicus", "Brycon.falcatus",
-               #"Brycon.melanopterus", "Colossoma.macropomum",
-               #"Hoplerythrinus.unitaeniatus", "Leporinus.brunneus",
-               #"Leporinus.friderici", "Leporinus.klausewitzi",
-               #"Lithodoras.dorsalis", "Megaleporinus.trifasciatus",
-               #"Myloplus.asterias", "Myloplus.rubripinnis",
-               #"Mylossoma.aureum", "Phractocephalus.hemioliopterus",
-               #"Piaractus.brachypomus", "Platynematichthys.notatus",    
-               "Pristobrycon.calmoni", "Pristobrycon.striolatus",    
-               "Auchenipterichthys.thoracatus","Brycon.pesu"
-               )
+spp_names <- c("Colossoma.macropomum")
 ```
 
 
@@ -283,8 +273,8 @@ occ_shp <- spp_data %>%
   occurrences_to_shapefile(spp_names, grid_study_area)
 
 
-#mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 1, layer.name = "Study Area", legend=NULL) +
-#  mapview(occ_shp, zcol = "species", layer.name = "Species") 
+mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 1, layer.name = "Study Area", legend=NULL) +
+  mapview(occ_shp, zcol = "species", layer.name = "Species") 
 ```
 
 
@@ -297,7 +287,7 @@ We will say to the grid_study_area which cells have an occurrence record for the
     abbreviate(minlength = 10) %>% 
     as.vector()
 
-#if (spp_output %>% file_exists() == F) {
+if (spp_output %>% file_exists() == F) {
   grid_matrix_pa <- occ_shp %>% 
     occurrences_to_pa_shapefile(grid_study_area, spp_names)
   
@@ -307,10 +297,10 @@ We will say to the grid_study_area which cells have an occurrence record for the
   
   grid_matrix_pa %<>% select(all_of(spp_names_abv))
   
-#  grid_matrix_pa %>% st_write(dsn = spp_output)
-#} else {
-#  grid_matrix_pa <- spp_output %>% st_read()
-#}
+  grid_matrix_pa %>% st_write(dsn = spp_output)
+} else {
+  grid_matrix_pa <- spp_output %>% st_read()
+}
 
 grid_matrix_pa %>% 
   as.data.frame() %>% 
@@ -385,10 +375,10 @@ var_normalization <- tolower(current_var_names) # OR: paste0("bio_",1:19)
 var_pca_bio <- var_normalization # OR: paste0("bio_",1:19)
 
 # Number of PCA-axes to be retained.
-nr_comp_pca_bio <- 7
+nr_comp_pca_bio <- 4
 
 # Names of variables to be used as predictors when training the models. It can be environmental variables or PCA-axes.
-var_predictors <-c("dim_1_bio","dim_2_bio","dim_3_bio","dim_4_bio","dim_5_bio","dim_6_bio","dim_7_bio" )
+var_predictors <-c("dim_1_bio","dim_2_bio","dim_3_bio","dim_4_bio")
 ```
 
 
@@ -746,7 +736,7 @@ df_pa %>% predict_to_folder(scenarios_list=projection_data,
 
 ```{r map_pa, eval=T, include=T}
 predictions_sp <- sapply(spp_names, function(x){sp_predictions_from_folder(x,directory_projections)},simplify=F, USE.NAMES = T)
-pred_means <- predictions_means(predictions_sp, scenarios)
+pred_means <- predictions_means(predictions_sp, c(scenarios, 'current'))
 ensembles <- gcm_ensemble(pred_means, ssp=c('current', 'ssp245'))
 
 # Output ensembles
