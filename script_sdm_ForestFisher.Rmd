@@ -765,3 +765,17 @@ ensemble_map(ensembles$current$current_freq_mean, grid_study_area, "Current", 'F
 ```{r richness_map, eval=T, include=T}
 ensemble_map(ensembles$current$current_pa_mean, grid_study_area, "Current", 'Presence')
 ```
+
+
+## Frequence map in SSP2-4.5/2090
+
+```{r richness_map, eval=T, include=T}
+ensemble_map(ensembles$ssp245$freq_mean, grid_study_area, "SSP2-4.5/2090", 'Frequence')
+```
+
+
+## Presence map in SSP2-4.5/2090
+
+```{r richness_map, eval=T, include=T}
+ensemble_map(ensembles$ssp245$pa_sums, grid_study_area, "SSP2-4.5/2090", 'Presence')
+```

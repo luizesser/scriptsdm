@@ -181,18 +181,32 @@ richness_map <- function(df_pred, shp_estudo){
   return(mapa_temp)
 }
 
-ensemble_map <- function(df_pred, shp_estudo, title, title2){
+ensemble_map <- function(df_pred, shp_estudo, title, title2, th=NULL){
   shp_estudo <- cbind(shp_estudo, df_pred)
   df <- as.data.frame(shp_estudo)
   df$df_pred <- as.numeric(df$df_pred)
+  if(!is.null(th)){
+    df$df_pred <- ifelse(df$df_pred >= th, 1, 0)
+  }
+  if(length(unique(df_pred))==2){
+    mapa_temp <- ggplot(st_as_sf(df)) +
+      geom_sf(aes(fill = df_pred), color=NA) +
+      theme_bw() +
+      scale_fill_continuous(type='viridis', limits=c(0,max(df$df_pred))) +
+      
+      #scale_fill_continuous(name = title2, type='viridis', limits=c(0,max(df$df_pred)), option='C') +
+      ggtitle(paste0(title))
+  } else {
+    mapa_temp <- ggplot(st_as_sf(df)) +
+      geom_sf(aes(fill = df_pred), color=NA) +
+      theme_bw() +
+      scale_fill_gradientn(name = title2, colours = rainbow(5, rev=F)) +
+      
+      #scale_fill_continuous(name = title2, type='viridis', limits=c(0,max(df$df_pred)), option='C') +
+      ggtitle(paste0(title))
+  }
   
-  mapa_temp <- ggplot(st_as_sf(df)) +
-    geom_sf(aes(fill = df_pred), color=NA) +
-    theme_bw() +
-    scale_fill_gradientn(name = title2, colours = rainbow(5, rev=F)) +
-    
-    #scale_fill_continuous(name = title2, type='viridis', limits=c(0,max(df$df_pred)), option='C') +
-    ggtitle(paste0(title))
+  
   
   return(mapa_temp)
 }
