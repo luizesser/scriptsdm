@@ -11,7 +11,6 @@ output:
     toc_float: true          # colocar o sumário flutuante no canto superior esquerdo
     toc_depth: 3             # o sumário conterá três níveis de profundidade: capitulo, seção e subseção
     theme: cerulean          # tema de cores estilo de fonte, use o "united" para um tema monocromico
-    code_folding: hide       # inclui botão para mostrar/esconder código fonte
     fig_width: 8             # largura padrão das figuras
 editor_options: 
   chunk_output_type: inline
@@ -197,6 +196,7 @@ We will start with current data.
 
 ```{r rescaling current}
 ### Rescaling current data
+## Error in attempt to apply non-function
 if (output_shp_current %>% file_exists() == F) {
   grid_current <- grid_study_area %>% 
     add_raster(folder_current_rasters, raster_vars) 
@@ -206,7 +206,8 @@ if (output_shp_current %>% file_exists() == F) {
     dir_create()
   
   grid_current %>% saveRDS(output_shp_current)
-  grid_current %>% as.data.frame %>% select(!'geometry') %>% write.csv(here("output_data/WorldClim_data_current_rescaled/Colossoma_current.csv"))
+  grid_current %>% as.data.frame %>% select(!'geometry') %>% 
+    write.csv(here("output_data/WorldClim_data_current_rescaled/Colossoma_current.csv"))
 } else {
   grid_current <- output_shp_current %>% readRDS()
 }
@@ -228,8 +229,8 @@ if (!all(output_shp_future %>% file_exists())) {
        dir_create()
       
       grid_future %>% saveRDS(output_shp_future[grep(scenarios[i], output_shp_future)])
-      dir <- grep('.rds', '.csv', output_shp_future[grep(scenarios[i], output_shp_future)])
-      grid_future %>% as.data.frame %>% select(!'geometry') %>% write.csv(dir)  
+      l2 <- gsub('.rds$', '.csv', output_shp_future[grep(scenarios[i], output_shp_future)])
+      grid_future %>% as.data.frame %>% select(!'geometry') %>% write.csv(l2)  
   }
 }
 
@@ -328,11 +329,18 @@ To perform a VIF routine, we will use only the environmental data from the occur
 # Obtain occurrence data.frame and environmental variables:
 df_vif <- get_df_vif(grid_current, grid_matrix_pa)
 
+# To pre-select variables use the function select:
+# df_vif <- df_vif %>% select("length_km", "bio_1", "bio_2", "bio_3", "bio_4", "bio_12", "bio_13", "bio_14")
+
+# Or you can delete undesired variables using -c() in select function as well:
+# df_vif <- df_vif %>% select(-c("length_km", "bio_1", "bio_2", "bio_3", "bio_4", "bio_12", "bio_13", "bio_14"))
+
 # Run VIF routine from usdm package:
 vif_bio <- lapply(df_vif, function(x){vifcor(x,th=0.5)})
 vif_bio[[1]]
-# We can exclude variables with high VIF or go to the next step.
-grid_current <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
+
+# We can exclude variables with high VIF:
+grid_current <- sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T, simplify = F)
                         
 ```
 
@@ -563,15 +571,13 @@ names(grid_future) <- scenarios
 grid_future[[1]]
 ```
 
-If you want to use VIF or raw predictors:
+If you want to use VIF:
 ```{r , eval=T, include=T}
 # To use raw predictors (VIF):
-df_var_preditors <- output_shp_current %>%
-  get_predictors_as_df() %>% select(-c('cell_id'))
-#df_var_preditors <- grid_current %>% as.data.frame() %>% select(-c('geometry', 'cell_id', 'y_centroid', 'x_centroid')) # raw predictors
-grid_future <- lapply(output_shp_future,function(x){readRDS(x)}) # raw predictors
+df_var_preditors <- lapply(grid_current, function(x){as.data.frame(x) %>% select(-c('geometry', 'cell_id'))})
+grid_future <- lapply(output_shp_future,function(x){readRDS(x)})
 names(grid_future) <- scenarios
-grid_future[[1]]
+df_var_preditors[[1]]
 ```
 
 
@@ -696,11 +702,18 @@ thresholds_models_means <- spp_names %>%
   validation_metrics_from_folder(folder_models, thresholds_models)
 
 model_selection <- spp_names %>%  
-  validation_metrics_from_folder(folder_models, thresholds_models, stats = 'AUC', th = 0.8)
+  validation_metrics_from_folder(folder_models, thresholds_models, stats = 'AUC', th = 0.8) # mudar o th pra 'mean' ou 'best' ou integer com número de melhores? incluir mais opções de stats=c('AUC', 'TSS')
 
 thresholds_models_means[[1]]
 ```
 
+
+To see the mean AUC values:
+
+```{r auc_values, eval=T, include=T}
+spp_names %>%  
+  validation_metrics_from_folder(folder_models, thresholds_models, stats = 'AUC')
+```
 
 # Projections
 To project our models in space, we need to set where the models were saved (previously set as the folder_models object) and where we want to save our projections.
@@ -764,20 +777,20 @@ ensemble_map(ensembles$current$current_freq_mean, grid_study_area, "Current", 'F
 
 ## Presence map in current scenario
 
-```{r richness_map, eval=T, include=T}
+```{r richness_map1, eval=T, include=T}
 ensemble_map(ensembles$current$current_pa_mean, grid_study_area, "Current", 'Presence')
 ```
 
 
 ## Frequence map in SSP2-4.5/2090
 
-```{r richness_map, eval=T, include=T}
+```{r richness_map2, eval=T, include=T}
 ensemble_map(ensembles$ssp245$freq_mean, grid_study_area, "SSP2-4.5/2090", 'Frequence')
 ```
 
 
 ## Presence map in SSP2-4.5/2090
 
-```{r richness_map, eval=T, include=T}
+```{r richness_map3, eval=T, include=T}
 ensemble_map(ensembles$ssp245$pa_sums, grid_study_area, "SSP2-4.5/2090", 'Presence')
 ```

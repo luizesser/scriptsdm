@@ -35,19 +35,25 @@ tsne_plot <- function(df, df_bg, sp_names){
 }
 
 fit_data <- function(df_pa, df_var, df_bg){
+  #if(class(df_var)=='list'){
+  #  df_var <- as.data.frame(df_var)
+  #}
+  #if(class(df_bg)=='list'){
+  #  df_bg <- as.data.frame(df_bg)
+  #}
   if('geometry' %in% colnames(df_pa)){
     df_pa %<>% select(-c('geometry'))
   }
   if('cell_id' %in% colnames(df_bg[[1]])){
     df_bg %<>% lapply(function(x) { x["cell_id"] <- NULL; x })
   }
-  if('cell_id' %in% colnames(df_var)){
-    df_var %<>% select(-c('cell_id'))
+  if('cell_id' %in% colnames(df_var[[1]])){
+    df_var %<>% lapply(function(x) { x["cell_id"] <- NULL; x })
   }
   
   fitted_data <- list()
   for (sp in colnames(df_pa)){
-    df_var2 <- df_var %>% select(colnames(df_bg[[sp]]))
+    df_var2 <- df_var[[sp]] %>% select(colnames(df_bg[[sp]]))
     
     predict_data <- sdmData(
       sp %>% 
