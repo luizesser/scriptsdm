@@ -748,8 +748,7 @@ df_pa %>% predict_to_folder(scenarios_list=projection_data,
                               pred_methods=model_selection, 
                               thr_criteria=thresh_criteria, 
                               output_folder=directory_projections,
-                              thresholds_models_means=thresholds_models_means
-    )
+                              thresholds_models_means=thresholds_models_means)
 ```
   
   

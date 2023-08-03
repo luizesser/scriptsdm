@@ -300,8 +300,8 @@ predict_sp_to_folder <- function(df_pa, df_var, t_models, shp, pred_methods, thr
 #output_folder =   directory_projections
 #
 #thresholds_models_means
-#sp = colnames(df_pa)[5]
-#scenario_name = names(scenarios_list)[5]
+#sp = colnames(df_pa)[1]
+#scenario_name = names(scenarios_list)[1]
 
 predict_to_folder <- function(df_pa, scenarios_list, models_folder, pred_methods, thr_criteria, output_folder, thresholds_models_means){
   if ('geometry' %in% colnames(df_pa)){
@@ -334,6 +334,7 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, pred_methods
         if (!dir_exists(folder_tmp)){
           df_pred_freq <- scenarios_list %>% 
             pluck(scenario_name) %>% 
+            pluck(sp) %>%
             DRE_predict(t_models %>% pluck(sp), selected_models[[sp]], thr_criteria)
           
           # Consenso
@@ -713,9 +714,9 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
   
   if (method == "cluster") {
     backgrounds = list()
-    for (sp in colnames(df_pa)){
+    for (sp in names(df_pa)){
       if (!file_exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
-        df_p <- df_pa %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
+        df_p <- df_pa[[sp]] %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
         print(colnames(df_var))
         df_var2 <- df_var %>% .add_grupos(df_p, percent_grupos = 10, cluster_m = cluster_m) # k = 10% do numero de pres.
         print(colnames(df_var2))
@@ -794,24 +795,24 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
           }
           print(paste0("Building pseudoabsences for ",sp,"..."))
           
-          sp_dat <- cbind(df_pa,df_var)
+          sp_dat <- cbind(df_pa[,sp],df_var[[sp]])
+          colnames(sp_dat) <- c(sp,colnames(sp_dat)[-1])
           sp_dat <- sp_dat[sp_dat[,sp]==1,]
-          sp_dat <- sp_dat %>% select(sp,all_of(names(df_var)))
-          
-          d <- sdmData(reformulate(termlabels = names(df_var), response = sp),
+
+          d <- sdmData(reformulate(termlabels = colnames(df_var[[sp]]), response = sp),
                        train = sp_dat)
 
           m <- sdm(~.,
                    data = d,
                    methods='bioclim')
 
-          p <- predict(m, df_var,
+          p <- predict(m, df_var[[sp]],
                        filename=paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))
         } else {
           p <- raster(paste0(output_folder,'/',sp,'/bioclim_',sp,'.tif'))
         }
         p[p[]>0] <- NA
-        env2 <- df_var[!is.na(p),]
+        env2 <- df_var[[sp]][!is.na(p),]
         
         if(nrow(env2) > nrow(sp_dat)){
           pa <- env2[sample(nrow(env2), nrow(sp_dat)),]
@@ -836,8 +837,8 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
     dens_acum <- 0
     num_grupo_dens_acum <- 2
     backgrounds = list()
-    for (sp in colnames(df_pa)){
-      df_p <- df_pa %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
+    for (sp in names(df_pa)){
+      df_p <- df_pa[[sp]] %>% select(sp %>% all_of()) %>% filter(.[sp]==1)
       
       numero_grupos <- trunc(nrow(df_p))
       for (i in 2:numero_grupos){
@@ -925,10 +926,10 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
       if (!file_exists(paste0(output_folder,'/',sp,'/pseudoabsence_',method,'_',sp,'_',n_pa,'.csv'))){
         dir_create(output_folder_tmp)
         
-        n_pa2 <- df_pa[[sp]] %>% sum()
+        n_pa2 <- df_pa[,sp] %>% sum()
         
         df_bg <- df_var %>%
-          bind_cols(especie=df_pa[[sp]]) %>%
+          bind_cols(especie=df_pa[,sp]) %>%
           filter(especie==0) %>%
           sample_n(n_pa2) %>%
           select(-especie)
