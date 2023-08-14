@@ -9,7 +9,7 @@ library(rgdal)                               # readOGR, ler arquivos raster e sh
 library(rasterDT)                            # rasterização
 library(sf)                                  # manipulação de formas geométricas com interface com gdal, rgeos e proj4g
 library(rgeos)                               # habilita operações geométricas
-library(gdalUtils)                           #  
+#library(gdalUtils)                           #  
 library(stars)                               #
 library(maptools)
 library(magrittr)

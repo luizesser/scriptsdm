@@ -1,0 +1,820 @@
+---
+title: "Species Distribution Modeling in R"
+author: "Luíz Fernando Esser, Reginaldo Ré, Edivando V. do Couto"
+params:
+  especie: "Colossoma.macropomum"
+output:
+  html_document:
+    df_print: paged
+    number_sections: TRUE    # seções numeradas automaticamente
+    toc: true                # construir o sumário
+    toc_float: true          # colocar o sumário flutuante no canto superior esquerdo
+    toc_depth: 3             # o sumário conterá três níveis de profundidade: capitulo, seção e subseção
+    theme: cerulean          # tema de cores estilo de fonte, use o "united" para um tema monocromico
+    code_folding: hide       # inclui botão para mostrar/esconder código fonte
+    fig_width: 8             # largura padrão das figuras
+editor_options: 
+  chunk_output_type: inline
+---
+
+<style type="text/css">
+.main-container {
+  max-width: 2000px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+# Preparing the environment for script execution
+
+1. Download maxent.jar and place it in the same folder as this document
+     * Download from (http://biodiversityinformatics.amnh.org/open_source/maxent/./maxent.php?op=download)
+     * After the first time this script runs in its entirety, this file can be deleted if you wish
+2. Download and install R
+3. Download and install RTools 3.5
+     * Download from (https://cran.r-project.org/bin/windows/Rtools/Rtools35.exe)
+     * When installing, check the option to put RTools in *path*
+4. Download and install RStudio
+     * Download from (https://download1.rstudio.org/desktop/windows/RStudio-1.2.5001.exe)
+5. Install and load the devtools package (run the commands using the RStudio console)
+     * `install.packages("devtools")`
+     * `library(devtools)`
+6. Install the sdm package and the packages it depends on (run the commands using the RStudio console)
+     * `install.packages("sdm")`
+     * `library(sdm)`
+     * `installAll()`
+7. Install all other required packages (run commands using RStudio console)
+     * `install.packages(c("raster", "rgdal", "sf", "rgeos", "ggplot2", "cowplot", "plotly", "mapview", "ggfortify", "scales", "factoextra ", "ggcorrplot", "prettyGraphs", "Rtsne", "DT", "parallel", "snow", "sdm", "FactoMineR", "rdist", "usdm", "dplyr", "tidyr", "purrr", "purrrlyr", "here", "fs", "stringr", "exactextractr", "gdalUtils", "dismo", "rgbif", "boot", "httr", "CoordinateCleaner"))`
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r message=FALSE, warning=FALSE, include=FALSE}
+source("config/script_funcoes_auxiliares.R")
+```
+
+
+# Downloading data:
+## Downloading rasters
+First we create a folder in our working directory to include input data.
+```{r}
+# Create folder to store inputs.
+if(!dir_exists('input_data')){
+  dir_create('input_data')
+}
+```
+
+
+Now let's download data from WorldClim 2.1. Note that when R downloads a file it has a timeout of 60 seconds. This may not be enough to download environmental data, so we can set options(timeout=n), where n is the number of seconds we need to download the data.
+
+```{r download_rasters_wc2.1, eval=T, include=T}
+# This option allows us to control how much time do we need to download the data. If R takes more than 10 minutes (600 seconds) to download the data it will stop the download. Increase the timeout if needed.
+options(timeout=600)
+
+# Current data
+# Files are automatically saved in input_data folder.
+#WorldClim_data('current', variable = 'bioc', resolution = 2.5)
+
+# Future data
+gcms <- c('cc', 'gg', 'mr', 'uk')
+#WorldClim_data('future', variable = 'bioc', year = '2090', gcm = gcms, ssp = c('245','585'), resolution = 2.5) 
+```
+
+
+## Obtaining occurrence data from GBIF:
+
+```{r download_GBIF_data, eval=T, include=T}
+# Downloading data from GBIF
+# File is automatically saved in input_data folder
+# spp_data <- GBIF_data('Colossoma macropomum')
+```
+
+
+## Downloading shapefile for study area
+
+```{r}
+# Obtaining Natural Earth data:
+#shape_study_area <- rnaturalearth::ne_download(scale = 50, type = "rivers_lake_centerlines", category = "physical")
+```
+
+# Geoprocessing:
+## Open Files and Data
+Firstly, we name inputs and outputs, caring for using the correct extensions.
+a) Inputs:
+
+```{r}
+# Shapefile (polygon or lines) delimiting study area.
+shape_study_area_file <- here("input_data/shape_study_area/AmazonHydroRivers4.shp")  
+
+# Directory name containing current rasters to be rescaled.
+folder_current_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_current"
+
+# Directory name containing future rasters to be rescaled.
+folder_future_rasters <- "~/projetos/ForestFisher/input_data/WorldClim_data_future"
+```
+
+
+b) Outputs:
+
+```{r}
+# Name of shapefile (.shp) for the study area to be saved.
+output_shp_study_area <- "~/projetos/FF6/output_data/grid/Amazon_grid.shp"
+
+# Name of R object (.rds) where the current rescaled variables will be saved.
+output_shp_current <- "~/projetos/FF6/output_data/WorldClim_data_current_rescaled/Amazon_current.rds"
+
+# Set scenarios names:
+scenarios <- apply(expand.grid(gcms, c("ssp245","ssp585"),"2.5", c(2030,2050,2070,2090)), 1, paste, collapse="_")
+
+# Name of R object (.rds) where the future rescaled variables will be saved.
+output_shp_future <- here(paste0("~/projetos/FF6/output_data/WorldClim_data_future_rescaled/",
+                                 scenarios,
+                                 ".rds"))
+```
+
+
+c) Seting up some important variables:
+
+```{r}
+# Cell hight and width for the grid.
+# This value depends on rasters projection. If rasters are in UTM, values will be in meters. If rasters are in decimal degrees (as in WorldClim 2.1), values will be in degrees. However, note that the function make_grid (used to build the grid above study area) has an argument called epsg where we can reproject spatial data. The epsg of study area is further transmitted to predictor variables. This means that even if WorldClim 2.1 is projected in decimal degrees we should address cell sizes in the desired epsg.
+
+# Following values build a grid with 5 x 5 km.
+epsg = 6933
+cell_width = 7000
+cell_height = 7000
+# Note that setting those values to build a grid smaller than the input rasters may generate NaNs, causing some problems.
+
+# If you have any variable in shape_study_area that you want to keep for rescaling, you can set here.
+# Set the correct names of variables using as much as 10 characters.
+# Setting the names to list() will use none of the variables in the shape, while setting it to NULL will use all variables.
+names_var_shp_study_area <-  c("NEXT_DOWN", "MAIN_RIV", "LENGTH_KM", 
+                               "DIST_DN_KM", "DIST_UP_KM", "CATCH_SKM", "UPLAND_SKM", 
+                               "DIS_AV_CMS", "ORD_STRA", "ORD_CLAS", "ORD_FLOW")
+raster_vars <- paste0('bio_', 1:19)
+
+# As in the codeline above, here we set which variables in current rasters we want to keep for rescaling.
+# Set the correct names of variables using as much as 10 characters.
+# Setting the names to list() will use none of the variables in the shape, while setting it to NULL will use all variables.
+current_var_names <- c(names_var_shp_study_area, raster_vars) # or NULL
+
+# As in the codelines above, here we set which variables in future rasters we want to keep for rescaling.
+# We will usually need at least the same variables as in the current scenario for projection.
+# Set the correct names of variables using as much as 10 characters.
+# Setting the names to list() will use none of the variables in the shape, while setting it to NULL will use all variables.
+future_var_names <-  current_var_names 
+```
+
+
+## Study Area
+The map of study area needs to be imported to R, so we can create a grid for the study area. This grid will be used for model building and projections.
+
+```{r study area}
+shape_study_area <- shape_study_area_file %>%
+  st_read() %>%
+  repair_shp()
+
+if (output_shp_study_area %>% file_exists()== F){
+  grid_study_area <- shape_study_area %>% 
+      make_grid(cell_width, cell_height, names_var_shp_study_area, epsg=epsg) # target EPSG
+  
+  output_shp_study_area %>% 
+    path_dir() %>% 
+    dir_create()
+  
+  grid_study_area %>% st_write(
+      dsn = output_shp_study_area)
+} else {
+  grid_study_area <- output_shp_study_area %>% st_read()
+}
+```
+
+
+## Rescaling variables
+The next step aims to cross data from study area with rasters of variables.
+We will start with current data.
+
+```{r rescaling current}
+### Rescaling current data
+if (output_shp_current %>% file_exists() == F) {
+  grid_current <- grid_study_area %>% 
+    add_raster(folder_current_rasters, raster_vars) 
+    
+  output_shp_current %>% 
+    path_dir() %>% 
+    dir_create()
+  
+  grid_current %>% saveRDS(output_shp_current)
+  grid_current %>% as.data.frame %>% select(!'geometry') %>% 
+    write.csv(here("output_data/WorldClim_data_current_rescaled/Amazon_current.csv"))
+} else {
+  grid_current <- output_shp_current %>% readRDS()
+}
+```
+
+
+Now within a loop to rescale future variables.
+
+```{r rescaling future}
+### Rescaling future data
+if (!all(output_shp_future %>% file_exists())) {
+  for (i in 1:length(scenarios)) {
+
+      grid_future <- grid_study_area %>% 
+       add_raster(folder_future_rasters, future_var_names, scenarios[i]) 
+      
+      output_shp_future %>% 
+       path_dir() %>% 
+       dir_create()
+      
+      grid_future %>% saveRDS(output_shp_future[grep(scenarios[i], output_shp_future)])
+      l2 <- gsub('.rds$', '.csv', output_shp_future[grep(scenarios[i], output_shp_future)])
+      grid_future %>% as.data.frame %>% select(!'geometry') %>% write.csv(l2)  
+  }
+}
+
+grid_future <- lapply(output_shp_future,function(x){readRDS(x)})
+names(grid_future) <- scenarios
+
+print(grid_future[[1]])
+```
+
+
+# Occurrence data
+## Open files with data
+It is necessary to name the output. Be extra careful with extension names.
+a) Input:
+
+```{r input_own_data, eval=T, include=T}
+spp_data <- "~/projetos/FF4/scriptsdmmain/input_data/spp_data_complete.csv"
+```
+
+b) Output:
+
+```{r files output occurrence, eval=T, include=T}
+#  Set the path to the output shapefile, which will contain the presence/absence matrix.
+spp_output <- here("output_data/spp_pa_complete.gpkg")
+```
+
+
+It is also necessary to set some other important parameters.
+
+```{r , eval=T, include=T}
+# Species names to be used in the study. 
+# Names should be identical from input/spp_data.csv obtained previously.
+# Setting this to NULL will use all species.
+#spp_names <- especie # or NULL
+spp_names <- c("Brycon.amazonicus", 
+               "Brycon.falcatus", 
+               "Brycon.melanopterus", 
+               "Colossoma.macropomum",
+               "Hoplerythrinus.unitaeniatus", 
+               "Leporinus.brunneus",
+               "Leporinus.friderici", 
+               "Leporinus.klausewitzi",
+               "Lithodoras.dorsalis", 
+               "Megaleporinus.trifasciatus",
+               "Myloplus.asterias", 
+               "Myloplus.rubripinnis",
+               "Mylossoma.aureum", 
+               "Phractocephalus.hemioliopterus",
+               "Piaractus.brachypomus", 
+               "Platynematichthys.notatus",    
+               "Pristobrycon.calmoni", 
+               "Pristobrycon.striolatus",    
+               "Auchenipterichthys.thoracatus",
+               "Brycon.pesu"
+               )
+spp_names <- sort(spp_names)
+spp_names_abv <- spp_names %>% 
+    to_snake_case() %>% 
+    abbreviate(minlength = 10) %>% 
+    as.vector()
+spp_names_abv <- spp_names_abv[8]
+spp_names <- spp_names[8]
+
+```
+
+
+## Importing occurrence data
+
+```{r importing occurrence data,  eval=T, include=T}
+occ_shp <- spp_data %>% 
+  occurrences_to_shapefile(spp_names, grid_study_area)
+
+#mapview(grid_study_area[,1], alpha.regions = 0, color = "red", lwd = 1, layer.name = "Study Area", legend=NULL) +
+#  mapview(occ_shp, zcol = "species", layer.name = "Species") 
+```
+
+
+## Occurrence grid for the Study Area
+We will say to the grid_study_area which cells have an occurrence record for the studied species.
+
+```{r generating_shape_matrix_pa, eval=T, include=T}
+  #spp_names_abv <- spp_names %>% 
+  #  to_snake_case() %>% 
+  #  abbreviate(minlength = 10) %>% 
+  #  as.vector()
+
+if (spp_output %>% file_exists() == F) {
+  grid_matrix_pa <- occ_shp %>% 
+    occurrences_to_pa_shapefile(grid_study_area, spp_names)
+  
+  spp_output %>% 
+    path_dir() %>% 
+    dir_create()
+  
+  grid_matrix_pa %<>% select(all_of(spp_names_abv))
+  
+  grid_matrix_pa %>% st_write(dsn = spp_output, driver = "GPKG")
+} else {
+  grid_matrix_pa <- spp_output %>% st_read()
+}
+
+grid_matrix_pa %>% 
+  as.data.frame() %>% 
+  select(all_of(spp_names_abv)) %>% 
+  rowSums() %>% 
+  as.vector() %>% 
+  richness_map(., grid_study_area)
+```
+
+
+Check how many records there is to each species:
+
+```{r number of presences, eval=T, include=T}
+presences_number(grid_matrix_pa, spp_names)
+```
+
+
+# Variable Selection - VIF
+Variable Selection must be done OR with a VIF routine, OR with a PCA.
+To perform a VIF routine, we will use only the environmental data from the occurrence data.
+
+```{r vif_bio, eval=F, include=T}
+# Obtain occurrence data.frame and environmental variables:
+df_vif <- get_df_vif(grid_current, grid_matrix_pa)
+
+# Run VIF routine from usdm package:
+vif_bio <- lapply(df_vif, function(x){vifcor(x,th=0.5)})
+vif_bio[[1]]
+# We can exclude variables with high VIF or go to the next step.
+grid_current <-  sapply(names(df_vif), function(x){select(grid_current, !vif_bio[[x]]@excluded)}, USE.NAMES = T)
+                        
+```
+
+
+# Variable Selection - PCA
+a) Outputs:
+
+```{r output files PCA, eval=T, include=T}
+# Name of the shapefile in which the PCA values will be stored.
+shp_pca <- here("output_data/pca/shp_pca.rds")
+
+# Name of the shapefile in which current PCA projection will be stored.
+shp_preds <- here("output_data/pca/shp_preds.rds")
+
+# Name of the shapefile in which future PCA projection will be stored.
+shp_preds_future <- here("output_data/pca/shp_preds_future.rds")
+
+```
+
+
+b) Transforming objects to be used in the next steps:
+
+```{r setting up PCA, eval=T, include=T}
+shp_matrix_pa <- grid_matrix_pa
+
+df_species <- shp_matrix_pa %>% 
+  as.data.frame() %>%
+  select(-c('geom')) %>%
+  select(spp_names_abv)
+
+df_var_preditors <- output_shp_current %>%
+  get_predictors_as_df()
+```
+
+## Control Variables
+
+```{r control variables PCA, eval=T, include=T}
+# Names of variables to be normalized (centered and scaled).
+# Normalization can improve the modelling, the calculation of PCAs and the clusterization algorithms used to generate pseudoabsences.
+var_normalization <- tolower(current_var_names) # OR: paste0("bio_",1:19)
+
+# Names of variables to be used in PCA.
+var_pca_bio <- var_normalization # OR: paste0("bio_",1:19)
+
+# Number of PCA-axes to be retained.
+nr_comp_pca_bio <- 7
+
+# Names of variables to be used as predictors when training the models. It can be environmental variables or PCA-axes.
+var_predictors <-c("dim_1_bio","dim_2_bio","dim_3_bio","dim_4_bio","dim_5_bio","dim_6_bio","dim_7_bio")
+```
+
+
+## Preparing Predictor Variables
+### Standardizing and normalizing
+
+```{r transforming_variables, eval=T, include=T}
+df_potential_predictors <- df_species %>%
+  bind_cols(df_var_preditors)
+
+df_potential_predictors <- df_potential_predictors %>% 
+  center_scale(var_normalization)
+
+df_potential_predictors %>% 
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+
+## Preparing Variables for PCA
+
+```{r preparing_df_pca,  eval=T, include=T}
+df_var_pca <- df_potential_predictors %>% 
+  select(var_pca_bio[which(var_pca_bio %in% colnames(df_potential_predictors))])
+
+df_var_pca %>%
+  head() %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+
+### PCA analysis for variables.
+#### Correlation Matrix
+
+```{r graphic_corr, eval=T, include=T}
+df_var_pca %>% 
+  corr_plot()
+```
+  
+
+#### PCA analysis
+The table that follows shows the values of the axes and variables.
+A tabela a seguir mostra os valores dos eixos e variaveis.
+
+```{r calc_pca, eval=T, include=T}
+if (shp_pca %>% file_exists() == T) {
+  file_delete(shp_pca)
+}
+pca_bio <- df_var_pca %>% 
+  calc_pca(nr_comp_pca_bio, "bio")
+
+pca_bio$var$loadings %>% 
+  round(4) %>% 
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+
+Save pca with study area:
+
+```{r save_pca, eval=T}
+if(!dir_exists('output_data/pca/')){
+  dir_create('output_data/pca/')
+}
+
+grid_study_area %>% 
+  bind_cols(pca_bio$ind$coord %>% as.data.frame()) %>% 
+  saveRDS(file = shp_pca)
+```
+
+
+Summary of dimensions. The following table shows the correlation between variables with axes (i.e. the significance from each variable to given axle).
+
+```{r summ_pca_bio, eval=F, include=T}
+pca_bio %>% 
+  dt_pca_summ()
+```
+
+
+#### Variable Contribution
+
+```{r contrib_pca_bio, eval=F, include=T}
+pca_bio %>% 
+  contrib_scree()
+  
+pca_bio %>% 
+  contrib_corr()
+```
+
+
+```{r contrib_dims_pca_bio, eval=F, include=T}
+pca_bio %>% 
+  contrib_dims()
+```
+
+
+#### Quality of Variables' Representation
+PCA-axes considering the quality of variables' representation.
+
+```{r cos2_pca_bio, eval=F, include=T}
+pca_bio %>% 
+  pca_cos2()
+```
+
+
+Quality of variables' representation on axes.
+
+```{r dims_cos2_pca_bio, eval=F, include=T}
+pca_bio %>% 
+  cos2_dims()
+```
+
+
+```{r cos2_corr_pca_bio, eval=F, warning=F, include=T}
+pca_bio %>% 
+  cos2_corr()
+```
+
+
+```{r pca_bio_biplot, eval=F, include=T}
+pca_bio %>% 
+  pca_bi_plot(df_species %>% rowMeans() %>% ceiling())
+```
+
+
+```{r select_pca_bio, eval=T, include=T}
+n_var <- pca_bio %>% 
+  comp_pca_retain()
+n_var
+n_var <- n_var %>% unlist() %>% median()
+```
+
+
+## Generating Shapefile with Predictors
+### Jointing PCA to variables
+
+```{r, eval=T}
+df_potential_predictors <- df_potential_predictors %>%
+  bind_cols(pca_bio$ind$coord[,1:n_var] %>% as.data.frame()) 
+
+df_potential_predictors %>% 
+  head() %>% 
+  round(4) %>%
+  datatable(options = list(pageLength = 10, scrollX=T))
+```
+
+
+```{r generating_shapefiles_var, eval=T, include=T}
+if (shp_preds %>% file_exists() == F){
+  df_var_preditors <- df_potential_predictors %>% 
+    select(var_predictors[1:n_var] %>% all_of())
+  
+  grid_study_area %>% 
+    select(cell_id) %>% 
+    bind_cols(df_var_preditors) %>% 
+    saveRDS(file = shp_preds)
+}
+```
+
+
+## Projecting PCA-axes to the future scenarios.
+```{r saving_pca_future, eval=T, include=T}
+pca_future <- proj_pca(pca_bio, grid_future)
+pca_future[[1]]
+
+pca_future %>% 
+    saveRDS(file = shp_preds_future)
+```
+
+
+# Training Models
+## Set Data
+As in previous steps, it is necessary to set inputs and outputs, taking extra care with extension names.
+a) Input:
+If you want to use PCA:
+```{r , eval=T, include=T}
+# To use PCA-axis:
+df_var_preditors <- df_potential_predictors[,colnames(df_potential_predictors) %in% var_predictors] # PCA
+grid_future <- pca_future # PCA
+names(grid_future) <- scenarios
+grid_future[[1]]
+```
+
+If you want to use VIF or raw predictors:
+```{r , eval=F, include=T}
+# To use raw predictors (VIF):
+df_var_preditors <- output_shp_current %>%
+  get_predictors_as_df() %>% select(-c('cell_id'))
+#df_var_preditors <- grid_current %>% as.data.frame() %>% select(-c('geometry', 'cell_id', 'y_centroid', 'x_centroid')) # raw predictors
+grid_future <- lapply(output_shp_future,function(x){readRDS(x)}) # raw predictors
+names(grid_future) <- scenarios
+grid_future[[1]]
+```
+
+
+b) Outputs:
+
+```{r , eval=T, include=T}
+# Name the directory to save trained models.
+folder_models <- here("output_data/models")
+```
+
+
+c) Control Variables:
+
+```{r control_variables_training, eval=T, include=T}
+# Algorithm names to be used in Species Distribution Modeling.
+# Run getmethodNames() to unveil which algorithms are available.
+algo <- c("rbf", "svm", "mda")
+
+# Set the threshold criteria.
+# 1:sp=se, 2:max(se+sp), 3:min(cost), 4:minROCdist, 5:max(kappa), 6:max(ppv+npv), 7:ppv=npv, 8:max(NMI), 9:max(ccr), 10: prevalence
+thresh_criteria <- 2
+
+# Number of runs to each algorithm
+n_run <- 10
+
+# Number of folds to crossvalidation
+n_folds <- 4
+
+# Number of pseudoabsence sets
+n_pa <- 1
+```
+
+
+## Generate Pseudoabsences
+To build models, it is necessary to use pseudoabsences that contrast to presences. Currently, only the 'random' method is applied.
+
+```{r generate pseudabsences,  eval=T, include=T}
+df_pseudoabsences <- shp_matrix_pa %>%
+  select(spp_names_abv) %>%
+  pseudoabsences(df_var_preditors, spp_names_abv, method="envelope", folder_models) 
+```
+
+
+It is possible to plot a t-SNE graph to check whether pseudoabsence data clusters into a separate group from presence data.
+
+```{r tsne plot,  eval=T, include=T}
+tsne_list <- df_potential_predictors %>% 
+  tsne_plot(df_pseudoabsences, spp_names)
+tsne_list
+```
+
+
+## Join data
+As we are using the sdm package, let's start to build our models by indicating our input data.
+```{r pca_pseudoabsence, eval=T, include=T}
+# For PCA routine:
+for(s in colnames(df_species)){
+  df_pseudoabsences[[s]] <- df_pseudoabsences[[s]][,var_predictors]
+}
+```
+
+```{r vif_pseudoabsence,  eval=F, include=T}
+# For VIF routine:
+for(s in colnames(df_species)){
+  df_pseudoabsences[[s]] <- exclude(df_pseudoabsences[[s]], vif_bio[[s]])
+}
+```
+
+```{r fitting data, eval=T, include=T}
+d <- df_species %>%
+  fit_data(df_var_preditors, df_pseudoabsences)
+
+d[[1]]
+```
+
+
+## Training Models
+With the data, we can build our models.
+
+```{r training, eval=T, include=T}
+if(!file.exists(paste0('output_data/models/',spp_names_abv,'/',spp_names_abv,'.sdm'))){
+  df_species %>%
+  train_models_to_folder(
+      d, 
+      algo, 
+      n_run, 
+      n_folds, 
+      folder_models
+    )
+}
+
+folder_models %>%
+  dir_ls() %>%
+  path_file() %>% 
+  head() %>%
+  as.data.frame()
+
+"Number of trained species: " %>%
+  paste0( 
+    folder_models %>%
+      dir_ls() %>% 
+      length()
+  ) %>%
+  print()
+```
+
+
+How many models failed?
+
+```{r fails, eval=F, include=T}
+d %>% 
+  model_failures(folder_models)
+```
+
+
+## Model Selection and Threshold visualization
+
+```{r thresholds, eval=T, include=T}
+spp_names <- colnames(df_species)
+
+thresholds_models <- spp_names %>% 
+  sp_thresh_from_folder(folder_models, thresh_criteria)
+
+thresholds_models_means <- spp_names %>%  
+  validation_metrics_from_folder(folder_models, thresholds_models)
+
+model_selection <- spp_names %>%  
+  validation_metrics_from_folder(folder_models, thresholds_models, stats = 'AUC', th = 0.8)
+
+spp_names %>%  
+  validation_metrics_from_folder(folder_models, thresholds_models, stats = 'AUC')
+
+thresholds_models_means[[1]]
+```
+
+
+# Projections
+To project our models in space, we need to set where the models were saved (previously set as the folder_models object) and where we want to save our projections.
+
+```{r output directory projections, eval=T, include=T}
+directory_projections <- here("output_data/projections")
+```
+
+
+Set up some variables.
+
+```{r prepare_predictions,  eval=T, include=T}
+df_pa <- shp_matrix_pa %>% 
+  as.data.frame() %>%
+  select(-c('geom'))
+
+df_potential_predictors <- df_pa %>% 
+  bind_cols(df_var_preditors)
+
+projection_data <- lapply(grid_future, function(x){ x <- as.data.frame(x)
+                                           x[!(names(x) %in% c("x_centroid", "y_centroid", "geometry"))]})
+projection_data$current <- df_var_preditors
+```
+
+
+And finally run our projections.
+
+```{r pred_distribution, eval=T, include=T, warning=FALSE}
+# Project models in scenarios
+df_pa %>% predict_to_folder(scenarios_list=projection_data,
+                              models_folder=folder_models, 
+                              pred_methods=model_selection, 
+                              thr_criteria=thresh_criteria, 
+                              output_folder=directory_projections,
+                              thresholds_models_means=thresholds_models_means
+    )
+```
+  
+  
+# Visualizing Results
+## Obtain predictions
+
+```{r map_pa, eval=T, include=T}
+predictions_sp <- sapply(spp_names, function(x){sp_predictions_from_folder(x,directory_projections)},simplify=F, USE.NAMES = T)
+predictions_sp <- predictions_means(predictions_sp, c(scenarios, 'current'))
+ensembles <- gcm_ensemble(pred_means, ssp=c('current', 'ssp245', 'ssp585'))
+
+# Output ensembles
+for (i in 1:length(ensembles)) {
+  write.csv(ensembles[[i]], paste0(directory_projections,'/',names(ensembles)[i],'.csv'))
+}
+```
+
+
+## Frequence map in current scenario
+
+```{r map_frequency_ensemble, eval=T, include=T}
+ensemble_map(ensembles$current$current_freq_mean, grid_study_area, "Current", 'Frequence')
+```
+
+
+## Presence map in current scenario
+
+```{r richness_map, eval=T, include=T}
+ensemble_map(ensembles$current$current_pa_mean, grid_study_area, "Current", 'Presence')
+```
+
+
+## Frequence map in SSP2-4.5/2090
+
+```{r richness_map2, eval=T, include=T}
+ensemble_map(ensembles$ssp245$freq_mean, grid_study_area, "SSP2-4.5/2090", 'Frequence')
+```
+
+
+## Presence map in SSP2-4.5/2090
+
+```{r richness_map3, eval=T, include=T}
+ensemble_map(ensembles$ssp245$pa_sums, grid_study_area, "SSP2-4.5/2090", 'Presence')
+```

@@ -118,10 +118,10 @@ b) Outputs:
 
 ```{r}
 # Name of shapefile (.shp) for the study area to be saved.
-output_shp_study_area <- here("output_data/grid/Colossoma_grid.shp")
+output_shp_study_area <- here("output_data/grid/Amazon_grid.shp")
 
 # Name of R object (.rds) where the current rescaled variables will be saved.
-output_shp_current <- here("output_data/WorldClim_data_current_rescaled/Colossoma_current.rds")
+output_shp_current <- here("output_data/WorldClim_data_current_rescaled/Amazon_current.rds")
 
 # Set scenarios names:
 scenarios <- apply(expand.grid(gcms, c("ssp245"),"10", 2090), 1, paste, collapse="_")
