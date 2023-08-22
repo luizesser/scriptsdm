@@ -291,8 +291,8 @@ spp_names_abv <- spp_names %>%
     to_snake_case() %>% 
     abbreviate(minlength = 10) %>% 
     as.vector()
-spp_names_abv <- spp_names_abv[8]
-spp_names <- spp_names[8]
+spp_names_abv <- spp_names_abv[4]
+spp_names <- spp_names[4]
 
 ```
 
@@ -343,7 +343,7 @@ grid_matrix_pa %>%
 
 Check how many records there is to each species:
 
-```{r number of presences, eval=T, include=T}
+```{r number of presences, eval=F, include=T}
 presences_number(grid_matrix_pa, spp_names)
 ```
 
@@ -648,7 +648,7 @@ df_pseudoabsences <- shp_matrix_pa %>%
 
 It is possible to plot a t-SNE graph to check whether pseudoabsence data clusters into a separate group from presence data.
 
-```{r tsne plot,  eval=T, include=T}
+```{r tsne plot,  eval=F, include=T}
 tsne_list <- df_potential_predictors %>% 
   tsne_plot(df_pseudoabsences, spp_names)
 tsne_list
@@ -779,11 +779,15 @@ df_pa %>% predict_to_folder(scenarios_list=projection_data,
   
 # Visualizing Results
 ## Obtain predictions
+## Ensemble to each species:
 
 ```{r map_pa, eval=T, include=T}
 predictions_sp <- sapply(spp_names, function(x){sp_predictions_from_folder(x,directory_projections)},simplify=F, USE.NAMES = T)
-predictions_sp <- predictions_means(predictions_sp, c(scenarios, 'current'))
-ensembles <- gcm_ensemble(pred_means, ssp=c('current', 'ssp245', 'ssp585'))
+pred_means <- predictions_means(predictions_sp, c(scenarios, 'current'))
+ensembles <- gcm_ensemble(pred_means, 
+                          ssp=c('current', 
+                                'ssp245_2.5_2030', 'ssp245_2.5_2050', 'ssp245_2.5_2070', 'ssp245_2.5_2090', 
+                                'ssp585_2.5_2030', 'ssp585_2.5_2050', 'ssp585_2.5_2070', 'ssp585_2.5_2090'))
 
 # Output ensembles
 for (i in 1:length(ensembles)) {
@@ -806,15 +810,20 @@ ensemble_map(ensembles$current$current_pa_mean, grid_study_area, "Current", 'Pre
 ```
 
 
-## Frequence map in SSP2-4.5/2090
+## Ensembles for ForestFisher
 
 ```{r richness_map2, eval=T, include=T}
-ensemble_map(ensembles$ssp245$freq_mean, grid_study_area, "SSP2-4.5/2090", 'Frequence')
+ensemble_map(ensembles$ssp245_2.5_2030$freq_wmean_auc, grid_study_area, "SSP2-4.5/2030", 'Frequence W-Mean AUC')
 ```
 
+```{r richness_map2, eval=T, include=T}
+ensemble_map(ensembles$ssp5$freq_wmean_tss, grid_study_area, "SSP2-4.5/2090", 'Frequence W-Mean TSS')
+```
 
-## Presence map in SSP2-4.5/2090
+```{r richness_map2, eval=T, include=T}
+ensemble_map(ensembles$ssp585$freq_wmean_tss, grid_study_area, "SSP5-8.5/2090", 'Frequence W-Mean TSS')
+```
 
-```{r richness_map3, eval=T, include=T}
-ensemble_map(ensembles$ssp245$pa_sums, grid_study_area, "SSP2-4.5/2090", 'Presence')
+```{r richness_map2, eval=T, include=T}
+ensemble_map(ensembles$ssp585$freq_wmean_tss, grid_study_area, "SSP5-8.5/2090", 'Frequence W-Mean TSS')
 ```
