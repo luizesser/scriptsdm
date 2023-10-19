@@ -5,13 +5,13 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE, fig.width = 12,
 library(raster)                              # manipulação de rasters
 #library(terra)                              # manipulação de rasters
 #detach("package:terra", unload=T)
-library(rgdal)                               # readOGR, ler arquivos raster e shapefile
+#library(rgdal)                               # readOGR, ler arquivos raster e shapefile
 library(rasterDT)                            # rasterização
 library(sf)                                  # manipulação de formas geométricas com interface com gdal, rgeos e proj4g
-library(rgeos)                               # habilita operações geométricas
+#library(rgeos)                               # habilita operações geométricas
 #library(gdalUtils)                           #  
 library(stars)                               #
-library(maptools)
+#library(maptools)
 library(magrittr)
 
 # Gráficos
@@ -108,7 +108,7 @@ if (interactive()){
 #df_p = scenarios_list %>% 
 #  pluck(scenario_name)
 #m_treinados = t_models %>% pluck(sp)
-#algoritmo_predicao = pred_methods
+#algoritmo_predicao = selected_models[[sp]]
 #tipo_thresh=2
 #lista_thresh=NULL
 

@@ -19,7 +19,7 @@ tsne_plot <- function(df, df_bg, sp_names){
     
     esp_colors <- df_pred %>% 
       unique() %>% 
-      select(sp) %>% 
+      select(all_of(sp)) %>% 
       pull()
     
     tsne_result <- qplot(
@@ -332,10 +332,17 @@ predict_to_folder <- function(df_pa, scenarios_list, models_folder, pred_methods
         file_tmp <- scenario_name
         
         if (!dir_exists(folder_tmp)){
-          df_pred_freq <- scenarios_list %>% 
-            pluck(scenario_name) %>% 
+          scen <- scenarios_list %>% 
+            pluck(scenario_name)
+          if(class(scen)=='list'){
+            df_pred_freq <- scen %>%
             pluck(sp) %>%
-            DRE_predict(t_models %>% pluck(sp), selected_models[[sp]], thr_criteria)
+              DRE_predict(t_models %>% pluck(sp), selected_models[[sp]], thr_criteria)
+          }
+          if(class(scen)=='data.frame'){
+            df_pred_freq <- scen %>%
+              DRE_predict(t_models %>% pluck(sp), selected_models[[sp]], thr_criteria)
+          }
           
           # Consenso
           #df_pred_freq <- df_pred_freq %>% 
@@ -659,7 +666,7 @@ model_failures <- function(fitted_data, models_folder){
 #cluster_m="k-means"
 #n_pa=1
 #output_folder=here("output_data/models")
-
+#
 #sp=colnames(df_pa)[1]
 
 pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster_m="kmeans", n_pa=1, output_folder=here("output_data/models")){
@@ -796,7 +803,7 @@ pseudoabsences <- function (shp_pa, df_var, especies, method="envelope", cluster
           print(paste0("Building pseudoabsences for ",sp,"..."))
           
           sp_dat <- cbind(df_pa[,sp],df_var[[sp]])
-          colnames(sp_dat) <- c(sp,colnames(sp_dat)[-1])
+          colnames(sp_dat)[1] <- sp
           sp_dat <- sp_dat[sp_dat[,sp]==1,]
 
           d <- sdmData(reformulate(termlabels = colnames(df_var[[sp]]), response = sp),

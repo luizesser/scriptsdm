@@ -25,8 +25,10 @@ get_predictors_as_df <- function(shp){
   df_var_preditoras <- shp %>%
     readRDS() %>%
     st_as_sf() %>% 
-    as.data.frame() %>%
-    select(-c('geometry','x_centroid','y_centroid'))
+    as.data.frame() 
+  if('geometry'   %in% colnames(df_var_preditoras)){df_var_preditoras <- select(df_var_preditoras,-c('geometry'))}
+  if('x_centroid' %in% colnames(df_var_preditoras)){df_var_preditoras <- select(df_var_preditoras,-c('x_centroid'))}
+  if('y_centroid' %in% colnames(df_var_preditoras)){df_var_preditoras <- select(df_var_preditoras,-c('y_centroid'))}
   return(df_var_preditoras)
 }
 

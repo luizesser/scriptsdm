@@ -39,7 +39,7 @@ drop_areas <- function(shp, inf_limit=0) {
   return(shp)      
 }
 
-make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid=T, epsg=NULL){
+make_grid <- function(shp, cell_width=0, cell_height=0, var_names=NULL, centroid=F, epsg=NULL){
   sfc_as_cols <- function(x, geometry, names = c("x","y")) {
     if (missing(geometry)) {
       geometry <- sf::st_geometry(x)

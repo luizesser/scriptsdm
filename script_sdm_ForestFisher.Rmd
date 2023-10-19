@@ -44,7 +44,8 @@ editor_options:
      * `library(sdm)`
      * `installAll()`
 7. Install all other required packages (run commands using RStudio console)
-     * `install.packages(c("raster", "rgdal", "sf", "rgeos", "ggplot2", "cowplot", "plotly", "mapview", "ggfortify", "scales", "factoextra ", "ggcorrplot", "prettyGraphs", "Rtsne", "DT", "parallel", "snow", "sdm", "FactoMineR", "rdist", "usdm", "dplyr", "tidyr", "purrr", "purrrlyr", "here", "fs", "stringr", "exactextractr", "gdalUtils", "dismo", "rgbif", "boot", "httr"))`
+     * `install.packages(c("ade4","boot","cowplot","DT","factoextra","FactoMineR","fs","ggcorrplot","ggfortify","ggplot2","here","httr","janitor","lubridate","magrittr","mapview","parallel","paran","patchwork","plotly","purrrlyr","raster","rasterDT","rdist","rgbif","Rtsne","scales","sdm","sf","snakecase","snow","stars","stringr","tidyverse","usdm","vroom"))`
+     
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -612,7 +613,7 @@ n_pa <- 1
 
 
 ## Generate Pseudoabsences
-To build models, it is necessary to use pseudoabsences that contrast to presences. Currently, only the 'random' method is applied.
+To build models, it is necessary to use pseudoabsences that contrast to presences. Currently, only the 'random' and 'envelope' methods are applied.
 
 ```{r generate pseudabsences,  eval=T, include=T}
 df_pseudoabsences <- shp_matrix_pa %>%
