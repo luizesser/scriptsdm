@@ -470,6 +470,20 @@ folder_models %>%
 ```
 
 
+We can check for the response curves:
+
+```{r response_curves, eval=T, include=T}
+m <- sp_model_from_folder(colnames(df_species), folder_models)
+rcurve(m$clssm_mcrp) # all models
+id_mda <- getModelId(m$clssm_mcrp)[getModelInfo(m$clssm_mcrp)$method == 'mda']
+id_svm <- getModelId(m$clssm_mcrp)[getModelInfo(m$clssm_mcrp)$method == 'svm']
+id_rbf <- getModelId(m$clssm_mcrp)[getModelInfo(m$clssm_mcrp)$method == 'rbf']
+rcurve(m$clssm_mcrp, id=id_mda) # only mda models
+rcurve(m$clssm_mcrp, id=id_svm) # only svm models
+rcurve(m$clssm_mcrp, id=id_rbf) # only rbf models
+```
+
+
 How many models failed?
 
 ```{r fails, eval=F, include=T}
