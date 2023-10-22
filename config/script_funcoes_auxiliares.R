@@ -55,6 +55,7 @@ library(snakecase)                           # transformação de strings em sna
 library(lubridate)                           # manipulação de datas
 library(rgbif)                               # download GBIF data
 library(httr)                                # download data from web
+library(CoordinateCleaner)                   # data cleaning routine
 
 select <- dplyr::select
 here <- here::here
@@ -694,7 +695,7 @@ predictions_means <- function(predictions_sp, scenarios){
   result <- l[[1]]
   df <- l %>% as.data.frame()
   scenarios <- gsub("-",".",scenarios)
-  if('current' %in% colnames(df)){scenarios2 <- c('current',sort(scenarios))} else {scenarios2 <- scenarios}
+  scenarios2 <- sort(scenarios2)
   for(s in scenarios2){
     if(length(sp_names)==1){
       result <- cbind(result, df[,grep(paste0(s,'_freq.consensus'), colnames(df))])
@@ -792,25 +793,19 @@ GBIF_data <- function(s, file='input_data/spp_data.csv'){
 }
 
 
-data.clean <- function(x, r=NULL){
-  x <- subset( x, !is.na("decimalLongitude") | !is.na("decimalLatitude"))
-  x <- cc_cap( x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
-  x <- cc_cen( x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
-  x <- cc_dupl(x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
-  x <- cc_equ( x, lon = "decimalLongitude", lat = "decimalLatitude")
-  x <- cc_inst(x, lon = "decimalLongitude", lat = "decimalLatitude", species = "species")
-  x <- cc_val( x, lon = "decimalLongitude", lat = "decimalLatitude")
-  x <- cc_sea( x, lon = "decimalLongitude", lat = "decimalLatitude")
-  if(!is.null(r)){
-    print('Raster identified, procceding with rasterized filter.')
-    r <- raster(r)
-    values(r) <- 1:ncell(r)
-    x2 <- x
-    coordinates(x2) <- 2:3
-    cell_id <- extract(r, x2)
-    x <- cbind(x, cell_id)
-    x <- x[!duplicated(x[,c(1,4)]),-4]
-  }
+data_clean <- function(occ, pred=NULL, species=NA, long=NA, lat=NA, terrestrial=FALSE){
+  x <- occ
+  if(!is.na(long)){lon=long} else {lon='decimalLongitude'}
+  if(!is.na(lat)){lat=lat} else {lat='decimalLatitude'}
+  if(!is.na(species)){species=species} else {species='species'}
+  x <- subset( x, !is.na(lon) | !is.na(lat))
+  x <- cc_cap( x, lon = lon, lat = lat, species = species)
+  x <- cc_cen( x, lon = lon, lat = lat, species = species)
+  x <- cc_dupl(x, lon = lon, lat = lat, species = species)
+  x <- cc_equ( x, lon = lon, lat = lat)
+  #x <- cc_inst(x, lon = lon, lat = lat, species = species)
+  x <- cc_val( x, lon = lon, lat = lat)
+  if(terrestrial){x <- cc_sea( x, lon = lon, lat = lat)}
   return(x)
 }
 
@@ -822,4 +817,5 @@ w_area <- function(x){
   print(paste0(result," km2"))
   return(as.numeric(result))
 }
+
 

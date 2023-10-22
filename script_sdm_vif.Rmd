@@ -44,7 +44,7 @@ editor_options:
      * `library(sdm)`
      * `installAll()`
 7. Install all other required packages (run commands using RStudio console)
-     * `install.packages(c("ade4","boot","cowplot","DT","factoextra","FactoMineR","fs","ggcorrplot","ggfortify","ggplot2","here","httr","janitor","lubridate","magrittr","mapview","parallel","paran","patchwork","plotly","purrrlyr","raster","rasterDT","rdist","rgbif","Rtsne","scales","sdm","sf","snakecase","snow","stars","stringr","tidyverse","usdm","vroom"))`
+     * `install.packages(c("ade4","boot","CoordinateCleaner","cowplot","DT","factoextra","FactoMineR","fs","ggcorrplot","ggfortify","ggplot2","here","httr","janitor","lubridate","magrittr","mapview","parallel","paran","patchwork","plotly","purrrlyr","raster","rasterDT","rdist","rgbif","Rtsne","scales","sdm","sf","snakecase","snow","stars","stringr","tidyverse","usdm","vroom"))`
      
 
 ```{r setup, include=FALSE}
@@ -268,10 +268,21 @@ spp_names <- c("Colossoma.macropomum")
 ```
 
 
+## Data Cleaning
+```{r data_cleaning,  eval=T, include=T}
+occ_df <- read.csv(spp_data)
+
+occ_df_clean <- data_clean(occ_df, species='species', long='decimalLongitude', lat='decimalLatitude', terrestrial = F)
+
+spp_data_clean <- paste0(dirname(spp_data), '/spp_data_clean.csv')
+write.csv(occ_df_clean, spp_data_clean, row.names = FALSE)
+```
+
+
 ## Importing occurrence data
 
 ```{r importing occurrence data,  eval=T, include=T}
-occ_shp <- spp_data %>% 
+occ_shp <- spp_data_clean %>% 
   occurrences_to_shapefile(spp_names, grid_study_area)
 
 
